@@ -145,7 +145,7 @@
         const higherPopularity = cardData[currentPair*2].popularity > cardData[currentPair*2+1].popularity;
         const color = higherPopularity && card === cardData[currentPair*2] || !higherPopularity && card === cardData[currentPair*2+1] ? "rgba(0,128,0,0.6)" : "rgba(128,0,0,0.6)";
         overlay.style.background = color;
-        overlay.textContent = `${card.popularity.toFixed(4)}%`;
+        overlay.textContent = `${card.popularity.toFixed(3)}%`;
         c.appendChild(overlay);
         overlays.push(overlay);
       });
@@ -158,12 +158,13 @@
         overlays.forEach(o => o.remove());
         currentPair++;
         showNextPair();
-      }, 2000);
+      }, 2800);
     }
 
     loadCards();
   </script>
 </body>
 </html>
+
 
 
