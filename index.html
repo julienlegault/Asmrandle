@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="/favicons/favicon-96x96.png" sizes="96x96" />
+  <link rel="icon" type="image/svg+xml" href="/favicons/favicon.svg" />
+  <link rel="shortcut icon" href="/favicons/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/favicons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-title" content="Asmrandle" />
+  <link rel="manifest" href="/favicons/site.webmanifest" />
   <title>Asmrandle</title>
   <style>
     body {
@@ -98,11 +104,11 @@
       background-color: #3a5a73;
     }
     #play-again {
-      background-color: #e9c46a;
+      background-color: #3d953d;
       color: black;
     }
     #play-again:hover {
-      background-color: #f1d37c;
+      background-color: #5eb75e;
     }
   </style>
 </head>
@@ -121,7 +127,7 @@
   </div>
   <div class="rules" id="rules">
     <h3>How to Play</h3>
-    <p>Click on the card you believe appears in a higher percentage of decks on <a href="https://edhrec.com">EDHRec</a>. 
+    <p>Click on the card you believe appears in a higher percentage of decks on <a href="https://edhrec.com"  target="_blank">EDHRec</a>. 
       This percentage represents how often a card is included in decks where it's eligible to be played — calculated by dividing the number of decks that include the card by the total number of decks it could appear in.</p>
   </div>
 
@@ -284,7 +290,7 @@
         const higherPopularity = cardData[currentPair*2].popularity > cardData[currentPair*2+1].popularity;
         const color = higherPopularity && card === cardData[currentPair*2] || !higherPopularity && card === cardData[currentPair*2+1] ? "rgba(0,128,0,0.6)" : "rgba(128,0,0,0.6)";
         overlay.style.background = color;
-        overlay.textContent = `${card.popularity.toFixed(2)}%`;
+        overlay.textContent = `${card.popularity.toFixed(3)}%`;
         c.appendChild(overlay);
         overlays.push(overlay);
       });
@@ -302,7 +308,7 @@
         overlays.forEach(o => o.remove());
         currentPair++;
         showNextPair();
-      }, 2000);
+      }, 2800);
     }
   </script>
 </body>
