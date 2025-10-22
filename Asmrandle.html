@@ -145,7 +145,7 @@
         const higherPopularity = cardData[currentPair*2].popularity > cardData[currentPair*2+1].popularity;
         const color = higherPopularity && card === cardData[currentPair*2] || !higherPopularity && card === cardData[currentPair*2+1] ? "rgba(0,128,0,0.6)" : "rgba(128,0,0,0.6)";
         overlay.style.background = color;
-        overlay.textContent = `${card.popularity.toFixed(2)}%`;
+        overlay.textContent = `${card.popularity.toFixed(4)}%`;
         c.appendChild(overlay);
         overlays.push(overlay);
       });
@@ -165,4 +165,5 @@
   </script>
 </body>
 </html>
+
 
