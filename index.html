@@ -238,7 +238,9 @@
       let shuffled = [];
       if (type === 'daily') {
         if (getCookie(`${dateStrSanatized}`) !== null) {
-          result.textContent = `You have already played today's Asmrandle! Come back tomorrow for a new challenge.`;
+          result.textContent = `You have already played today's Asmrandle! Come back tomorrow for a new challenge. Your score was ${getCookie(`${dateStrSanatized}`)}/10.`;
+          gameArea.style.display = "none";
+          result.style.display = "block";
           return;
         }
         gameType = 1;
