@@ -159,10 +159,16 @@
       gap: 32px;
       margin-bottom: 30px;
       padding: 20px;
-      background: rgba(255, 255, 255, 0.05);
       border-radius: 12px;
     }
 
+    .result-item-winner {
+      background: rgba(74, 222, 128, 0.25);
+    }
+
+    .result-item-loser {
+      background: rgba(239, 68, 68, 0.25);
+    }
     .result-card {
       position: relative;
     }
@@ -264,6 +270,7 @@
     let resultToCopy = "";
     let shuffled = [];
     let hardMode = false;
+    let resultArray = [];
 
     // Use the current date (YYYY-MM-DD) as a seed
     const today = new Date().toISOString().split('T')[0];
@@ -443,8 +450,10 @@
       }
       const resultBreakdown = document.getElementById("result-breakdown");
       for (let i = 0; i < 10; i++) {
+        const correct = resultArray[i];
         const div = document.createElement("div");
         div.className = "result-item";
+        div.classList.add(correct ? "result-item-winner" : "result-item-loser");
         const card = cardData[i * 2];
         const card2 = cardData[i * 2 + 1];
         
@@ -541,8 +550,10 @@
       if (correct) {
         correctCount++
         resultToCopy += "🟩";
+        resultArray[currentPair] = true;
       } else {
         resultToCopy += "🟥";
+        resultArray[currentPair] = false;
       };
 
       currentPair++;
