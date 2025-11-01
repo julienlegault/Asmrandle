@@ -449,7 +449,7 @@
         shuffled = shuffleSeeded(window.cardList, rng); // shuffle with seed for daily mode
         if (todayCookie !== null) {
           await fetchAllCardData();
-          resultArray = todayCookie.split("|").map(item => item.trim());
+          resultArray = todayCookie.split("|")[0].split(",").map(item => item === 'true');
           if (resultArray.length !== 10) {
             resultArray = Array(10).fill(false);
           }
