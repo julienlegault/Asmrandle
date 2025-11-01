@@ -3,12 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="A Magic: the Gathering daily game" />
+  <meta name="keywords" content="Magic the Gathering, MTG, card game, daily game, EDHRec, Commander, guessing game, card popularity" />
+  <meta name="author" content="Asmrandle" />
+  <meta name="robots" content="index, follow" />
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://asmrandle.com/" />
+  <meta property="og:title" content="Asmrandle - A Magic: the Gathering Daily Game" />
+  <meta property="og:description" content="A Magic: the Gathering daily game" />
+  <meta property="og:site_name" content="Asmrandle" />
+  
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary" />
+  <meta property="twitter:url" content="https://asmrandle.com/" />
+  <meta property="twitter:title" content="Asmrandle - A Magic: the Gathering Daily Game" />
+  <meta property="twitter:description" content="A Magic: the Gathering daily game" />
+  
+  <!-- Favicons -->
   <link rel="icon" type="image/png" href="/favicons/favicon-96x96.png" sizes="96x96" />
   <link rel="icon" type="image/svg+xml" href="/favicons/favicon.svg" />
   <link rel="shortcut icon" href="/favicons/favicon.ico" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicons/apple-touch-icon.png" />
   <meta name="apple-mobile-web-app-title" content="Asmrandle" />
   <link rel="manifest" href="/favicons/site.webmanifest" />
+  
   <title>Asmrandle</title>
   <style>
     body {
@@ -224,6 +246,31 @@
       }
     }
   </style>
+  
+  <!-- Structured Data for SEO -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Asmrandle",
+    "description": "A Magic: the Gathering daily game",
+    "url": "https://asmrandle.com",
+    "applicationCategory": "Game",
+    "operatingSystem": "Web Browser",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Organization",
+      "name": "Asmrandle"
+    },
+    "keywords": "Magic the Gathering, MTG, card game, daily game, EDHRec, Commander",
+    "genre": "Card Game",
+    "inLanguage": "en-US"
+  }
+  </script>
 </head>
 <body>
   <h1>Asmrandle</h1>
@@ -458,7 +505,7 @@
           for (let i = 0; i < 10; i++) {
             resultToCopy += resultArray[i] ? "🟩" : "🟥";
           }
-          resultToCopy += ` | ${correctCount}/10`;
+          resultToCopy += ` ${correctCount}/10`;
           resultText.textContent = `You have already played today's Asmrandle! Come back tomorrow for a new challenge. Your score was ${resultToCopy}.`;
           resultToCopy += ` | ${dateStr} | https://asmrandle.com`;
           gameArea.style.display = "none";
