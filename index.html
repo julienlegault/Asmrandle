@@ -348,13 +348,14 @@
           const potential = parseFloat(card.potential_decks);
           let flavorText = "No flavor text available";
           let imageUrl = card.image_uris?.[0]?.normal || null;
+          let artImg = null;
           if (hardMode) {
             try {
               const scryfallRes = await fetch(`https://api.scryfall.com/cards/${card.id}`);
               if (!scryfallRes.ok) return fetchCardData(20 +idx);
               const scryfallData = await scryfallRes.json();
               flavorText = scryfallData?.flavor_text || "No flavor text available";
-              imageUrl = scryfallData?.image_uris?.art_crop || imageUrl;
+              artImg = scryfallData?.image_uris?.art_crop || imageUrl;
             } catch (err) {
               return fetchCardData(20 +idx);
             }
@@ -365,6 +366,7 @@
             name,
             popularity,
             img: imageUrl,
+            artImg,
             flavorText
           });
         } catch (err) {
@@ -398,6 +400,7 @@
           name,
           popularity: null,
           img: null,
+          artImg: null,
           flavorText: null
         });
       }
@@ -498,7 +501,7 @@
         const div = document.createElement("div");
         div.className = "card";
         const img = document.createElement("img");
-        img.src = card.img;
+        img.src = hardMode ? card.artImg : card.img;
         div.appendChild(img);
         if (hardMode) {
           const overlay = document.createElement("div");
@@ -554,7 +557,7 @@
       setTimeout(() => {
         overlays.forEach(o => o.remove());
         showNextPair();
-      }, 2800);
+      }, 200);
     }
   </script>
 </body>
