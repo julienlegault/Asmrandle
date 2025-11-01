@@ -1,4 +1,5 @@
-[
+// Card list as a global variable for local testing
+window.cardList = [
   "nissa-worldsoul-speaker",
   "static-orb",
   "sensory-deprivation",
@@ -29254,4 +29255,4 @@
   "firesong-and-sunspeaker",
   "samut-the-tested",
   "sinew-sliver"
-]
+];
