@@ -329,7 +329,7 @@
         date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
         expires = "; expires=" + date.toUTCString();
       }
-      document.cookie = name + "=" + (value || "") + expires + "; path=/";
+      document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
     }
 
     function getCookie(name) {
@@ -382,72 +382,17 @@
         }
     }
 
-    async function loadCards(type) {
-      hardMode = document.querySelector("#hard-mode").checked;
-      mainMenu.style.display = "none";
-      if (type === 'daily') {
-        todayCookie = getCookie(`${dateStrSanatized}`);
-        if (todayCookie !== null) {
-          resultText.textContent = `You have already played today's Asmrandle! Come back tomorrow for a new challenge. Your score was ${todayCookie}/10.`;
-          resultToCopy = `${todayCookie}/10 | ${dateStr} | https://asmrandle.com`;
-          gameArea.style.display = "none";
-          result.style.display = "block";
-          return;
-        }
-        gameType = 1;
-        shuffled = shuffleSeeded(window.cardList, rng); // shuffle with seed for daily mode
-      } else {
-        shuffled = [...window.cardList].sort(() => 0.5 - Math.random()); // shuffle full list
+    function fetchAllCardData() {
+      const promises = [];
+      for (let i = 0; i < 20; i++) {
+        promises.push(fetchCardData(i).then(data => {
+          cardData[i] = data;
+        }));
       }
-
-      let idx = 0;
-      while (idx < 20) {
-        const name = shuffled[idx++];
-        cardData.push({
-          name,
-          popularity: null,
-          img: null,
-          artImg: null,
-          flavorText: null
-        });
-      }
-
-      await fetchCardData(0).then(data => {
-        cardData[0] = data;
-      });
-      await fetchCardData(1).then(data2 => {
-        cardData[1] = data2;
-      });
-      for (let i = 0; i < 10; i++) {
-        const dot = document.createElement("div");
-        dot.className = "dot";
-        scoreboard.appendChild(dot);
-      }
-      showNextPair();
+      return Promise.all(promises);
     }
 
-    function saveResults() {
-        increaseCount();
-        if (gameType === 1) {
-          copyResultsBtn.style.display = "inline-block";
-          setCookie(`${dateStrSanatized}`, `${resultToCopy}|${correctCount}`, 2147483647); // Set cookie to never expire
-          showResults();
-        } else {
-          copyResultsBtn.style.display = "none";
-          showResults();
-        }
-        return;
-    }
-
-    function showResults() {
-      gameArea.style.display = "none";
-      result.style.display = "block";
-      if (gameType === 1) {
-        resultText.textContent = `Asmrandle, ${dateStr} | ${correctCount}/10 correct`;
-        resultToCopy += ` ${correctCount}/10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`
-      } else {
-        resultText.textContent = `You got ${correctCount}/10 correct.`;
-      }
+    function showResultsBreakdown() {
       const resultBreakdown = document.getElementById("result-breakdown");
       for (let i = 0; i < 10; i++) {
         const correct = resultArray[i];
@@ -494,6 +439,87 @@
         div.appendChild(card2Container);
         resultBreakdown.appendChild(div);
       }
+    }
+
+    async function loadCards(type) {
+      hardMode = document.querySelector("#hard-mode").checked;
+      mainMenu.style.display = "none";
+      if (type === 'daily') {
+        todayCookie = getCookie(`${dateStrSanatized}`);
+        shuffled = shuffleSeeded(window.cardList, rng); // shuffle with seed for daily mode
+        if (todayCookie !== null) {
+          await fetchAllCardData();
+          resultArray = todayCookie.split("|").map(item => item.trim());
+          if (resultArray.length !== 10) {
+            resultArray = Array(10).fill(false);
+          }
+          correctCount = resultArray.filter(item => item).length;
+          resultToCopy = "";
+          for (let i = 0; i < 10; i++) {
+            resultToCopy += resultArray[i] ? "🟩" : "🟥";
+          }
+          resultToCopy += ` | ${correctCount}/10`;
+          resultText.textContent = `You have already played today's Asmrandle! Come back tomorrow for a new challenge. Your score was ${resultToCopy}.`;
+          resultToCopy += ` | ${dateStr} | https://asmrandle.com`;
+          gameArea.style.display = "none";
+          result.style.display = "block";
+          showResultBreakdown();
+          return;
+        }
+        gameType = 1;
+      } else {
+        shuffled = [...window.cardList].sort(() => 0.5 - Math.random()); // shuffle full list
+      }
+
+      let idx = 0;
+      while (idx < 20) {
+        const name = shuffled[idx++];
+        cardData.push({
+          name,
+          popularity: null,
+          img: null,
+          artImg: null,
+          flavorText: null
+        });
+      }
+
+      await fetchCardData(0).then(data => {
+        cardData[0] = data;
+      });
+      await fetchCardData(1).then(data2 => {
+        cardData[1] = data2;
+      });
+      for (let i = 0; i < 10; i++) {
+        const dot = document.createElement("div");
+        dot.className = "dot";
+        scoreboard.appendChild(dot);
+      }
+      showNextPair();
+    }
+
+    function saveResults() {
+        increaseCount();
+        if (gameType === 1) {
+          copyResultsBtn.style.display = "inline-block";
+          setCookie(`${dateStrSanatized}`, `${resultArray}|${correctCount}`, 30); // Set cookie for 30 days
+          showResults();
+        } else {
+          copyResultsBtn.style.display = "none";
+          showResults();
+        }
+        return;
+    }
+
+    function showResults() {
+      gameArea.style.display = "none";
+      result.style.display = "block";
+      if (gameType === 1) {
+        resultText.textContent = `Asmrandle, ${dateStr} | ${correctCount}/10 correct`;
+        resultToCopy += ` ${correctCount}/10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`
+      } else {
+        resultText.textContent = `You got ${correctCount}/10 correct.`;
+      }
+      showResultBreakdown();
     }
 
     function showNextPair() {
