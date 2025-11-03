@@ -8,6 +8,7 @@ This workflow automatically updates the Magic: the Gathering card list using the
 2. **On Pull Request Merge**: When pull requests are merged into main
 3. **Manual Trigger**: Can be run manually from the GitHub Actions tab
 4. **48-Hour Check**: Only runs if the card list hasn't been updated in the past 48 hours
+5. **Once a Month**: Automatically updates on the first of every month
 
 ## What it does:
 
@@ -40,7 +41,7 @@ This workflow automatically updates the Magic: the Gathering card list using the
 
 ## Manual Execution:
 
-You can manually trigger the workflow from the GitHub Actions tab if needed, even within the 48-hour window.
+You can manually trigger the workflow from the GitHub Actions tab if needed
 
 ## Monitoring:
 
