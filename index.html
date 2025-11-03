@@ -302,6 +302,7 @@
   <script src="./formatted_card_list.js"></script>
   
   <script>
+
     const mainMenu = document.getElementById("main-menu");
     const scoreboard = document.getElementById("scoreboard");
     const gameArea = document.getElementById("game");
@@ -390,6 +391,21 @@
       return null;
     }
 
+    function getDigitLength(card, card2) {
+      let found = false;
+      let length = 3;
+      while (!found && length <= 6) {
+        const factor = Math.pow(10, length);
+        const pop1 = Math.round(card.popularity * factor);
+        const pop2 = Math.round(card2.popularity * factor);
+        if (pop1 !== pop2 && pop1 !== 0) {
+          found = true;
+        } else {
+          length++;
+        }
+      }
+      return length;
+    }
     async function fetchCardData(idx) {
       const name = shuffled[idx++];
         try {
@@ -462,7 +478,7 @@
         }
         const overlay1 = document.createElement("div");
         overlay1.className = "result-popularity-overlay";
-        overlay1.textContent = `${card.popularity.toFixed(3)}%`;
+        overlay1.textContent = `${card.popularity.toFixed(getDigitLength(card, card2))}%`;
         card1Container.appendChild(img1);
         card1Container.appendChild(overlay1);
         
@@ -478,7 +494,7 @@
         }
         const overlay2 = document.createElement("div");
         overlay2.className = "result-popularity-overlay";
-        overlay2.textContent = `${card2.popularity.toFixed(3)}%`;
+        overlay2.textContent = `${card2.popularity.toFixed(getDigitLength(card2, card))}%`;
         card2Container.appendChild(img2);
         card2Container.appendChild(overlay2);
         
@@ -613,7 +629,7 @@
         const higherPopularity = cardData[currentPair*2].popularity > cardData[currentPair*2+1].popularity;
         const color = higherPopularity && card === cardData[currentPair*2] || !higherPopularity && card === cardData[currentPair*2+1] ? "rgba(0,128,0,0.6)" : "rgba(128,0,0,0.6)";
         overlay.style.background = color;
-        overlay.textContent = `${card.popularity.toFixed(3)}%`;
+        overlay.textContent = `${card.popularity.toFixed(getDigitLength(card, cardData[currentPair*2 + (i === 0 ? 1 : 0)]))}%`;
         c.appendChild(overlay);
         overlays.push(overlay);
       });
