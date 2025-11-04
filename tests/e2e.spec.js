@@ -97,14 +97,15 @@ test.describe('Asmrandle E2E Tests', () => {
     });
 
     test('Cookie retrieved correctly and used', async ({ page }) => {
-        await page.goto('http://localhost:3000');
-
         // Set daily cookie to a known value
-        page.context().addCookies([{
-        name: '20251101',
-        value: 'true,true,true,true,true,false,false,false,false,false',
-        domain: 'localhost',
+        await page.context().addCookies([{
+            name: '20251101',
+            value: 'true,true,true,true,true,false,false,false,false,false',
+            domain: 'localhost',
+            path: '/'
         }]);
+
+        await page.goto('http://localhost:3000');
 
         // Start daily game
         await page.click('#start-daily');
@@ -126,15 +127,15 @@ test.describe('Asmrandle E2E Tests', () => {
         
         // Play through all 10 cards
         for (let i = 0; i < 10; i++) {
-        // Wait for cards to load
-        await page.waitForSelector('.card img', { timeout: 15000 });
-        
-        // Click on the first card
-        await page.click('.card:first-child');
-        
-        // Wait for overlay to appear and disappear
-        await page.waitForSelector('.overlay', { timeout: 5000 });
-        await page.waitForSelector('.overlay', { state: 'detached', timeout: 5000 });
+            // Wait for cards to load
+            await page.waitForSelector('.card img', { timeout: 15000 });
+            
+            // Click on the first card
+            await page.click('.card:first-child');
+            
+            // Wait for overlay to appear and disappear
+            await page.waitForSelector('.overlay', { timeout: 5000 });
+            await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
         }
         
         // After 10 cards, check that results are shown
