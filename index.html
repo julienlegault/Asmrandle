@@ -33,11 +33,15 @@
   
   <title>Asmrandle</title>
   <style>
+    
     body {
       background: #111;
       color: white;
       font-family: Arial, sans-serif;
       text-align: center;
+      /*min-height: 100vh; */
+      position: relative;
+      padding-bottom: 120px; /* Space for fixed footer on wide screens */
     }
     .scoreboard {
       display: flex;
@@ -152,6 +156,9 @@
     
     /* Responsive design for narrow screens */
     @media (max-width: 550px) {
+      body {
+        padding-bottom: 0; /* Remove fixed footer spacing on narrow screens */
+      }
       .game-area {
         flex-direction: column;
         gap: 20px;
@@ -164,6 +171,67 @@
       h1 {
         font-size: 2.5em;
       }
+      .footer {
+        position: static; /* Normal flow on narrow screens */
+        margin-top: 50px;
+      }
+    }
+
+  /* Footer styles */
+    .footer {
+      margin-top: 50px;
+      padding: 20px;
+      color: #ccc;
+      font-size: 0.65em;
+      border-top: 1px solid #444;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
+    }
+
+    /* Footer positioning for medium screens */
+    @media (min-width: 551px) and (max-width: 1279px) {
+      .footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        margin-top: 0;
+        background: #111;
+        border-top: 1px solid #444;
+        max-width: 100%;
+        z-index: 1000;
+      }
+    }
+    
+    /* Footer positioning for wide screens */
+    @media (min-width: 1280px) {
+      .footer {
+        position: fixed;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-top: 0;
+        background: #111;
+        border-top: 1px solid #444;
+        max-width: 800px;
+        z-index: 1000;
+      }
+    }
+    .footer a {
+      color: #ccc;
+      text-decoration: none;
+      margin-right: 10px;
+    }
+    .footer a img {
+      width: 24px;
+      height: 24px;
+      vertical-align: middle;
+    }
+    .footer p {
+      margin-top: 10px;
+      line-height: 1.4;
     }
 
   /* Result breakdown styles */
@@ -296,6 +364,11 @@
     <h3>How to Play</h3>
     <p>Click on the card you believe appears in a higher percentage of decks on <a href="https://edhrec.com"  target="_blank">EDHRec</a>. 
       This percentage represents how often a card is included in decks where it's eligible to be played — calculated by dividing the number of decks that include the card by the total number of decks it could appear in.</p>
+  </div>
+  <div class="footer">
+    <!--LinkedIn-->
+    <a href="https://www.linkedin.com/in/julienplegault/" target="_blank" rel="noopener noreferrer"><img src="images/InBug-White.png" alt="LinkedIn" /></a>
+    <p>Portions of Asmrandle are unofficial Fan Content permitted under the Wizards of the Coast Fan Content Policy. The literal and graphical information presented on this site about Magic: The Gathering, including card images and mana symbols, is copyright Wizards of the Coast, LLC. Asmrandle is not produced by or endorsed by Wizards of the Coast.</p>
   </div>
 
   <!-- Load card list -->
