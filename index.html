@@ -393,8 +393,7 @@
     let hardMode = false;
     let resultArray = [];
 
-    // Use the current date (YYYY-MM-DD) as a seed
-    const today = new Date().toISOString().split('T')[0];
+    // Use the current date (YYYYMMDD) as a seed
     const dateObj = new Date();
     const yyyy = dateObj.getUTCFullYear();
     const mm = String(dateObj.getUTCMonth() + 1).padStart(2, '0');

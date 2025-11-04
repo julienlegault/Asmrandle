@@ -99,9 +99,15 @@ test.describe('Asmrandle E2E Tests', () => {
     test('Cookie retrieved correctly and used', async ({ page }) => {
         await page.goto('http://localhost:3000');
 
+        const dateObj = new Date();
+        const yyyy = dateObj.getUTCFullYear();
+        const mm = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getUTCDate()).padStart(2, '0');
+        const todaysDate = `${yyyy}${mm}${dd}`;
+
         // Set daily cookie to a known value
         await page.context().addCookies([{
-            name: '20251101',
+            name: todaysDate,
             value: 'true,true,true,true,true,false,false,false,false,false|5',
             domain: 'localhost',
             path: '/'
@@ -114,7 +120,7 @@ test.describe('Asmrandle E2E Tests', () => {
         await page.click('#start-daily');
 
         // Wait for game to load
-        await page.wait(2000);
+        await page.waitForTimeout(2000);
 
         await page.screenshot({ path: 'test-results/before-results-wait.png', fullPage: true });
 
@@ -144,7 +150,7 @@ test.describe('Asmrandle E2E Tests', () => {
             
             // Wait for overlay to appear and disappear
             await page.waitForSelector('.overlay', { timeout: 5000 });
-            await page.wait(3000);
+            await page.waitForTimeout(3000);
             await page.screenshot({ path: `test-results/overlay-${i}.png`, fullPage: true });
             await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
         }
