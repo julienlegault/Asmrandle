@@ -97,6 +97,8 @@ test.describe('Asmrandle E2E Tests', () => {
     });
 
     test('Cookie retrieved correctly and used', async ({ page }) => {
+        await page.goto('http://localhost:3000');
+
         // Set daily cookie to a known value
         await page.context().addCookies([{
             name: '20251101',
@@ -105,7 +107,8 @@ test.describe('Asmrandle E2E Tests', () => {
             path: '/'
         }]);
 
-        await page.goto('http://localhost:3000');
+        // Reload page to pick up cookie
+        await page.reload();
 
         // Start daily game
         await page.click('#start-daily');
@@ -135,6 +138,7 @@ test.describe('Asmrandle E2E Tests', () => {
             
             // Wait for overlay to appear and disappear
             await page.waitForSelector('.overlay', { timeout: 5000 });
+            print(`Clicked card ${i + 1}`);
             await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
         }
         
