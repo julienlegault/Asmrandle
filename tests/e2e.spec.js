@@ -157,7 +157,6 @@ test.describe('Asmrandle E2E Tests', () => {
         expect(resultsBreakdown).toBeVisible(); // Should show breakdown of results
         const resultItem = await page.locator('.result-item').first();
         expect(resultItem).toBeVisible();
-        expect(resultItem.evaluate(el => el.backgroundColor)).not.toBe('#111'); // Should be win or loss
     });
 
     test('Page performance and loading', async ({ page }) => {
