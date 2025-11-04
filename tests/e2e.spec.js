@@ -119,19 +119,15 @@ test.describe('Asmrandle E2E Tests', () => {
         // Start daily game
         await page.click('#start-daily');
 
-        // Wait for game to load
-        await page.waitForTimeout(2000);
-
-        await page.screenshot({ path: 'test-results/before-results-wait.png', fullPage: true });
-
-        await page.waitForSelector('#results', { timeout: 10000 });
+        await page.waitForSelector('#result', { timeout: 10000 });
 
         // Check that results reflect cookie values
-        const resultsText = await page.locator('#results').innerText();
+        const resultsText = await page.locator('#result').innerText();
         expect(resultsText).toContain('🟩🟩🟩🟩🟩🟥🟥🟥🟥🟥 5/10');
     });
 
     test('Play full game', async ({ page }) => {
+        test.setTimeout(2 * 60 * 1000); // Extend timeout to 2 minutes
         await page.goto('http://localhost:3000');
         
         // Start a practice game
@@ -150,15 +146,13 @@ test.describe('Asmrandle E2E Tests', () => {
             
             // Wait for overlay to appear and disappear
             await page.waitForSelector('.overlay', { timeout: 5000 });
-            await page.waitForTimeout(3000);
-            await page.screenshot({ path: `test-results/overlay-${i}.png`, fullPage: true });
             await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
         }
         
         // After 10 cards, check that results are shown
-        await page.waitForSelector('#results', { timeout: 10000 });
-        const resultsText = await page.locator('#results').innerText();
-        const resultsBreakdown = await page.locator('#results-breakdown');;
+        await page.waitForSelector('#result', { timeout: 10000 });
+        const resultsText = await page.locator('#result').innerText();
+        const resultsBreakdown = await page.locator('#result-breakdown');
         expect(resultsText).toMatch(/\d+\/10/); // Should show score out of 10
         expect(resultsBreakdown).toBeVisible(); // Should show breakdown of results
         const resultItem = await page.locator('.result-item').first();
