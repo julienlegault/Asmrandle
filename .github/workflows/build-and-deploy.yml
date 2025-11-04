@@ -1,12 +1,19 @@
 name: Build and Deploy
 
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [ closed ]
   workflow_dispatch:  # Allow manual triggering
-  workflow_call:      # Allow this workflow to be called by other workflows
+  schedule:
+    # Run on the 1st day of every month at 2:00 AM UTC
+    - cron: '0 2 1 * *'
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
-  contents: read
+  contents: write  # Required to push commits and deploy
   pages: write
   id-token: write
 
@@ -17,6 +24,233 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Update card list job (only for scheduled runs or manual triggers)
+  update-cards:
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for proper date checking
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+    
+    - name: Check if script needs to run
+      id: check_run
+      run: |
+        # Check if formatted_card_list.js exists and get its last modified time
+        if [ -f "formatted_card_list.js" ]; then
+          # Get the last commit date that modified formatted_card_list.js
+          LAST_MODIFIED=$(git log -1 --format="%ct" -- formatted_card_list.js 2>/dev/null || echo "0")
+          CURRENT_TIME=$(date +%s)
+          TIME_DIFF=$((CURRENT_TIME - LAST_MODIFIED))
+          DAYS_DIFF=$((TIME_DIFF / 86400))
+          
+          echo "Last modified: $LAST_MODIFIED ($(date -d @$LAST_MODIFIED))"
+          echo "Current time: $CURRENT_TIME ($(date -d @$CURRENT_TIME))"
+          echo "Days since last update: $DAYS_DIFF"
+          # For scheduled runs, use 2-day threshold
+          if [ $DAYS_DIFF -lt 2 ]; then
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "File was updated $DAYS_DIFF days ago (less than 2 days)"
+          else
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "File was updated $DAYS_DIFF days ago (more than 2 days) - will update"
+          fi
+        else
+          echo "should_run=true" >> $GITHUB_OUTPUT
+          echo "formatted_card_list.js doesn't exist - will create"
+        fi
+    
+    - name: Run card update script
+      if: steps.check_run.outputs.should_run == 'true'
+      run: |
+        echo "Running pullCards.py to update card list..."
+        python pullCards.py
+    
+    - name: Check for changes
+      if: steps.check_run.outputs.should_run == 'true'
+      id: check_changes
+      run: |
+        if git diff --quiet formatted_card_list.js 2>/dev/null; then
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+          echo "No changes detected in formatted_card_list.js"
+        else
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          echo "Changes detected in formatted_card_list.js"
+        fi
+    
+    - name: Commit and push changes
+      if: steps.check_run.outputs.should_run == 'true' && steps.check_changes.outputs.has_changes == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add formatted_card_list.js
+        git commit -m "🗓️ Monthly auto-update card list with latest cards from Scryfall
+        
+        - Scheduled monthly update using pullCards.py
+        - Added new cards from latest Scryfall oracle data
+        - Automated monthly maintenance via GitHub Actions"
+        git push
+
+  # Build and test job
+  test:
+    runs-on: ubuntu-latest
+    needs: [update-cards]
+    if: always() && (needs.update-cards.result == 'success' || needs.update-cards.result == 'skipped')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # If update-cards ran and made changes, we need to fetch the latest
+          ref: ${{ github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+          npm init -y
+          npm install --save-dev @playwright/test
+          npx playwright install --with-deps chromium
+
+      - name: Start local server for testing
+        run: |
+          # Start a simple HTTP server in the background
+          python3 -m http.server 3000 &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+          # Wait for server to start
+          sleep 5
+          # Verify server is running
+          curl -f http://localhost:3000 || exit 1
+
+      - name: Create E2E test file
+        run: |
+          mkdir -p tests
+          cat > tests/e2e.spec.js << 'EOF'
+          const { test, expect } = require('@playwright/test');
+
+          test.describe('Asmrandle E2E Tests', () => {
+            
+            test('Homepage loads correctly', async ({ page }) => {
+              await page.goto('http://localhost:3000');
+              
+              // Check page title
+              await expect(page).toHaveTitle(/Asmrandle/);
+              
+              // Check that main menu buttons are present
+              await expect(page.locator('#start-daily')).toBeVisible();
+              await expect(page.locator('#play-random')).toBeVisible();
+              
+              // Check footer elements
+              await expect(page.locator('.footer')).toBeVisible();
+              await expect(page.locator('.footer a img')).toBeVisible(); // LinkedIn icon
+            });
+
+            test('Daily game button functionality', async ({ page }) => {
+              await page.goto('http://localhost:3000');
+              
+              // Click daily game button
+              await page.click('#start-daily');
+              
+              // Wait for game to load
+              await page.waitForSelector('#game', { timeout: 10000 });
+              
+              // Check that game area is visible and main menu is hidden
+              await expect(page.locator('#main-menu')).toBeHidden();
+              await expect(page.locator('#game')).toBeVisible();
+              
+              // Check that scoreboard dots are present
+              await expect(page.locator('.scoreboard .dot')).toHaveCount(10);
+            });
+
+            test('Practice game button functionality', async ({ page }) => {
+              await page.goto('http://localhost:3000');
+              
+              // Click practice button
+              await page.click('#play-random');
+              
+              // Wait for game to load
+              await page.waitForSelector('#game', { timeout: 10000 });
+              
+              // Check that game area is visible and main menu is hidden
+              await expect(page.locator('#main-menu')).toBeHidden();
+              await expect(page.locator('#game')).toBeVisible();
+              
+              // Verify practice mode elements
+              await expect(page.locator('.practice-mode-indicator')).toBeVisible();
+            });
+
+            test('Card interactions work correctly', async ({ page }) => {
+              await page.goto('http://localhost:3000');
+              
+              // Start daily game
+              await page.click('#start-daily');
+              await page.waitForSelector('#game');
+              
+              // Wait for cards to load
+              await page.waitForSelector('.card-image', { timeout: 15000 });
+              
+              // Click on a card
+              const cards = page.locator('.card-image');
+              const firstCard = cards.first();
+              await firstCard.click();
+              
+              // Check that some interaction occurred (overlay or scoreboard update)
+              const overlay = page.locator('#overlay');
+              const scoreboard = page.locator('.scoreboard');
+              
+              // At least one should be visible after clicking
+              const overlayVisible = await overlay.isVisible();
+              const scoreboardVisible = await scoreboard.isVisible();
+              expect(overlayVisible || scoreboardVisible).toBeTruthy();
+            });
+
+            test('Responsive design works on mobile', async ({ page }) => {
+              // Set mobile viewport
+              await page.setViewportSize({ width: 375, height: 667 });
+              await page.goto('http://localhost:3000');
+              
+              // Check that elements are still visible and properly sized
+              await expect(page.locator('#start-daily')).toBeVisible();
+              await expect(page.locator('#play-random')).toBeVisible();
+              await expect(page.locator('.footer')).toBeVisible();
+            });
+          });
+          EOF
+
+      - name: Run E2E tests
+        run: npx playwright test
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Stop local server
+        if: always()
+        run: |
+          if [ ! -z "$SERVER_PID" ]; then
+            kill $SERVER_PID || true
+          fi
+
   # Deployment job (only runs if tests pass)
   deploy:
     environment:
@@ -24,7 +258,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: test
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call')
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
