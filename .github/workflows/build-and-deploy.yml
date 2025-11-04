@@ -155,15 +155,17 @@ jobs:
           echo "✅ Tests directory found with test files"
           ls -la tests/
 
-      - name: Run E2E tests
+      - name: Run Playwright tests
         run: npx playwright test
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-report
-          path: playwright-report/
+          path: |
+            test-results/
+            playwright-report/
           retention-days: 30
 
       - name: Stop local server

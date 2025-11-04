@@ -112,6 +112,9 @@ test.describe('Asmrandle E2E Tests', () => {
 
         // Start daily game
         await page.click('#start-daily');
+
+        await page.screenshot({ path: 'test-results/before-results-wait.png', fullPage: true });
+        
         await page.waitForSelector('#results', { timeout: 10000 });
 
         // Check that results reflect cookie values
@@ -138,7 +141,6 @@ test.describe('Asmrandle E2E Tests', () => {
             
             // Wait for overlay to appear and disappear
             await page.waitForSelector('.overlay', { timeout: 5000 });
-            print(`Clicked card ${i + 1}`);
             await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
         }
         
