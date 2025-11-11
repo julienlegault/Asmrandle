@@ -91,7 +91,13 @@
       max-width: 600px;
       margin-left: auto;
       margin-right: auto;
-      text-align: left;
+      text-align: center;
+    }
+    .edhrec-link {
+      color: #646cdd;
+    }
+    .edhrec-link:visited {
+      color: #8053b4;
     }
     h1 {
       font-size: 3em;
@@ -376,7 +382,7 @@
   </div>
   <div class="rules" id="rules">
     <h3>How to Play</h3>
-    <p>Click on the card you believe appears in a higher percentage of decks on <a href="https://edhrec.com"  target="_blank">EDHRec</a>. 
+    <p>Click on the card you believe appears in a higher percentage of decks on <a href="https://edhrec.com" class="edhrec-link" target="_blank">EDHRec</a>. 
       This percentage represents how often a card is included in decks where it's eligible to be played — calculated by dividing the number of decks that include the card by the total number of decks it could appear in.</p>
   </div>
   <div class="footer">
@@ -742,16 +748,19 @@
       currentPair++;
       const idx1 = currentPair * 2;
       const idx2 = idx1 + 1;
+      const startWait = Date.now();
       await fetchCardData(idx1).then(data => {
           cardData[idx1] = data;
       });
       await fetchCardData(idx2).then(data2 => {
           cardData[idx2] = data2;
       });
+      const elapsed = Date.now() - startWait;
+      const waitTime = Math.max(2800 - elapsed, 0);
       setTimeout(() => {
         overlays.forEach(o => o.remove());
         showNextPair();
-      }, 2800);
+      }, waitTime);
     }
   </script>
 </body>
