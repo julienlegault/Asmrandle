@@ -14,8 +14,8 @@ test.describe('Asmrandle E2E Tests', () => {
         
         // Check footer elements
         await expect(page.locator('.footer')).toBeVisible();
-        await expect(page.locator('#linkedin-link')).toBeVisible(); // LinkedIn icon
-        await expect(page.locator('#github-link')).toBeVisible(); // Github icon
+        await expect(page.locator('#linkedin-link img')).toBeVisible(); // LinkedIn icon
+        await expect(page.locator('#github-link img')).toBeVisible(); // Github icon
     });
 
     test('Daily game button functionality', async ({ page }) => {
