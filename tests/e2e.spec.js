@@ -114,8 +114,7 @@ test.describe('Asmrandle E2E Tests', () => {
     const yyyy = getPart('year');
     const mm = getPart('month');
     const dd = getPart('day');
-    const dateStr = `${yyyy}-${mm}-${dd}`;
-    const dateStrSanatized = `${yyyy}${mm}${dd}`;
+    const todaysDate = `${yyyy}${mm}${dd}`;
 
         // Set daily cookie to a known value
         await page.context().addCookies([{
