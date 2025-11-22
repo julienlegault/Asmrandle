@@ -419,11 +419,20 @@
     let hardMode = false;
     let resultArray = [];
 
-    // Use the current date (YYYYMMDD) as a seed
-    const dateObj = new Date();
-    const yyyy = dateObj.getUTCFullYear();
-    const mm = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(dateObj.getUTCDate()).padStart(2, '0');
+    // Use the current date (YYYYMMDD) in Central Time as a seed
+    // We use Intl.DateTimeFormat with the "America/Chicago" timezone so the daily seed follows Central Time (CST/CDT)
+    const now = new Date();
+    const centralFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Chicago',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = centralFormatter.formatToParts(now);
+    const getPart = (type) => parts.find(p => p.type === type)?.value || '';
+    const yyyy = getPart('year');
+    const mm = getPart('month');
+    const dd = getPart('day');
     const dateStr = `${yyyy}-${mm}-${dd}`;
     const dateStrSanatized = `${yyyy}${mm}${dd}`;
 
@@ -494,8 +503,8 @@
       let length = 3;
       while (!found && length <= 6) {
         const factor = Math.pow(10, length);
-        const pop1 = Math.round(card.popularity * factor);
-        const pop2 = Math.round(card2.popularity * factor);
+        const pop1 = Math.floor(card.popularity * factor);
+        const pop2 = Math.floor(card2.popularity * factor);
         if (pop1 !== pop2 && pop1 !== 0) {
           found = true;
         } else {
@@ -771,3 +780,4 @@
   </script>
 </body>
 </html>
+
