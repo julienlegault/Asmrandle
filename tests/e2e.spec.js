@@ -100,11 +100,22 @@ test.describe('Asmrandle E2E Tests', () => {
     test('Cookie retrieved correctly and used', async ({ page }) => {
         await page.goto('http://localhost:3000');
 
-        const dateObj = new Date();
-        const yyyy = dateObj.getUTCFullYear();
-        const mm = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-        const dd = String(dateObj.getUTCDate()).padStart(2, '0');
-        const todaysDate = `${yyyy}${mm}${dd}`;
+            // Use the current date (YYYYMMDD) in Central Time as a seed
+    // We use Intl.DateTimeFormat with the "America/Chicago" timezone so the daily seed follows Central Time (CST/CDT)
+    const now = new Date();
+    const centralFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Chicago',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = centralFormatter.formatToParts(now);
+    const getPart = (type) => parts.find(p => p.type === type)?.value || '';
+    const yyyy = getPart('year');
+    const mm = getPart('month');
+    const dd = getPart('day');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const dateStrSanatized = `${yyyy}${mm}${dd}`;
 
         // Set daily cookie to a known value
         await page.context().addCookies([{
