@@ -410,14 +410,34 @@
     }
 
     @media (max-width: 550px) {
+      #community-results {
+        margin: 20px 10px;
+        padding: 10px;
+      }
       .bar-label {
         font-size: 0.8em;
+        min-width: 18px;
       }
       .bar-container {
         height: 22px;
+        /* Fix Android Chrome rendering issues */
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
+      }
+      .bar-fill {
+        /* Improve Android Chrome animation performance */
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
+        will-change: width;
       }
       .bar-count {
         font-size: 0.7em;
+        /* Improve text rendering on Android */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      .bar-graph {
+        gap: 6px;
       }
     }
   </style>
@@ -552,21 +572,40 @@
       return a;
     }
 
-    async function getCount(score) {
+    async function getCount(score, retries = 2) {
       try {
+        // Ensure counter is initialized (critical for Android Chrome)
+        if (!counter) {
+          console.warn("Counter not initialized, creating new instance");
+          counter = new Counter({workspace: "asmrandle"});
+        }
+        
         const data = await counter.get(`daily${score}`);
         
-        // Check if last updated was before today's midnight CST, if so return 0 and reset the counter
+        // Check if last updated was before yesterday's midnight CST, if so return 0 and reset the counter
         // note updated_at is in UTC while we want to check against Central Time
         const lastUpdatedUTC = new Date(data.data.updated_at);
         const now = new Date();
         
-        // Get today's date in Central Time and create midnight
-        const todayCST = new Date(now.toLocaleString("en-US", { timeZone: "America/Chicago" }));
-        const yesterdayMidnightCST = new Date(todayCST.getFullYear(), todayCST.getMonth(), todayCST.getDate() - 1);
+        // More reliable date handling for mobile browsers
+        let yesterdayMidnightCST;
+        let lastUpdatedCST;
         
-        // Convert last updated time to Central Time for comparison
-        const lastUpdatedCST = new Date(lastUpdatedUTC.toLocaleString("en-US", { timeZone: "America/Chicago" }));
+        try {
+          // Try modern approach first
+          const todayCST = new Date(now.toLocaleString("en-US", { timeZone: "America/Chicago" }));
+          yesterdayMidnightCST = new Date(todayCST.getFullYear(), todayCST.getMonth(), todayCST.getDate() - 1);
+          lastUpdatedCST = new Date(lastUpdatedUTC.toLocaleString("en-US", { timeZone: "America/Chicago" }));
+        } catch (e) {
+          // Fallback for older Android Chrome versions
+          console.warn("Timezone handling fallback:", e);
+          const offsetCST = -6; // CST is UTC-6 (will need manual DST adjustment)
+          const offsetMs = offsetCST * 60 * 60 * 1000;
+          yesterdayMidnightCST = new Date(now.getTime() + offsetMs);
+          yesterdayMidnightCST.setUTCHours(0, 0, 0, 0);
+          yesterdayMidnightCST.setUTCDate(yesterdayMidnightCST.getUTCDate() - 1);
+          lastUpdatedCST = new Date(lastUpdatedUTC.getTime() + offsetMs);
+        }
         
         if (lastUpdatedCST < yesterdayMidnightCST) {
           counter.reset(`daily${score}`).catch(() => {
@@ -577,11 +616,24 @@
         return data.data.up_count;
       } catch (error) {
         console.error(`Error fetching count for score ${score}:`, error);
+        
+        // Retry on mobile networks (common issue with Android Chrome)
+        if (retries > 0) {
+          console.log(`Retrying getCount for score ${score}, ${retries} attempts remaining`);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          return getCount(score, retries - 1);
+        }
         return 0;
       }
     }
 
     function increaseCount(score = -1) {
+      // Ensure counter is initialized (critical for Android Chrome)
+      if (!counter) {
+        console.warn("Counter not initialized in increaseCount, creating new instance");
+        counter = new Counter({workspace: "asmrandle"});
+      }
+      
       if (score >= 0) {
         counter.up(`daily${score}`).catch(() => {
           // Ignore any errors
@@ -680,19 +732,24 @@
 
     async function showCommunityResults() {
       const communityResults = document.getElementById("community-results");
-      communityResults.style.display = "none";
-      
-      // Clear any existing content
-      communityResults.innerHTML = '';
+      communityResults.innerHTML = "";
       
       try {
-        // Fetch all counts concurrently
+        
+        // Add timeout for mobile reliability
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout after 10 seconds')), 10000)
+        );
+        // Fetch all counts concurrently with timeout
         const countPromises = [];
         for (let i = 0; i <= 10; i++) {
           countPromises.push(getCount(i));
         }
         
-        const counts = await Promise.all(countPromises);
+        const counts = await Promise.race([
+          Promise.all(countPromises),
+          timeoutPromise
+        ]);
         
         // Calculate total players
         let totalPlayers = counts.reduce((sum, count) => sum + count, 0);
