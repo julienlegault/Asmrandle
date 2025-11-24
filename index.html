@@ -555,12 +555,20 @@
       try {
         const data = await counter.get(`daily${score}`);
         
-        // Check if last updated date is yesterday, if so return 0 and reset the counter
+        // Check if last updated was before today's midnight CST, if so return 0 and reset the counter
         // note updated_at is in UTC while we want to check against Central Time
-        const lastUpdated = new Date(data.data.updated_at).toLocaleDateString("en-US", { timeZone: "America/Chicago" });
-        const today = new Date().toLocaleDateString("en-US", { timeZone: "America/Chicago" });
-        if (lastUpdated !== today) {
-          counter.set(`daily${score}`, 0).catch(() => {
+        const lastUpdatedUTC = new Date(data.data.updated_at);
+        const now = new Date();
+        
+        // Get today's date in Central Time and create midnight
+        const todayCST = new Date(now.toLocaleString("en-US", { timeZone: "America/Chicago" }));
+        const yesterdayMidnightCST = new Date(todayCST.getFullYear(), todayCST.getMonth(), todayCST.getDate() - 1);
+        
+        // Convert last updated time to Central Time for comparison
+        const lastUpdatedCST = new Date(lastUpdatedUTC.toLocaleString("en-US", { timeZone: "America/Chicago" }));
+        
+        if (lastUpdatedCST < yesterdayMidnightCST) {
+          counter.reset(`daily${score}`).catch(() => {
             // Ignore any errors
           });
           return 0;
@@ -572,10 +580,12 @@
       }
     }
 
-    function increaseCount(score = 0) {
-      counter.up(`daily${score}`).catch(() => {
-        // Ignore any errors
-      });
+    function increaseCount(score = -1) {
+      if (score >= 0) {
+        counter.up(`daily${score}`).catch(() => {
+          // Ignore any errors
+        });
+      }
       counter.up(`plays`).catch(() => {
         // Ignore any errors
       });
@@ -677,7 +687,7 @@
       try {
         // Fetch all counts concurrently
         const countPromises = [];
-        for (let i = 1; i <= 10; i++) {
+        for (let i = 0; i <= 10; i++) {
           countPromises.push(getCount(i));
         }
         
@@ -706,8 +716,8 @@
         barGraph.className = "bar-graph";
         
         // Create bars for scores 1-10
-        for (let i = 0; i < 10; i++) {
-          const score = i + 1;
+        for (let i = 0; i < 11; i++) {
+          const score = i;
           const count = counts[i];
           const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
           
