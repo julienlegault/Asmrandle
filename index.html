@@ -337,6 +337,88 @@
         width: min(200px, calc(100vw - 80px));
       }
     }
+
+    /* Community results bar graph styles */
+    #community-results {
+      margin: 30px auto;
+      max-width: 600px;
+      padding: 15px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+    }
+
+    #community-results h3 {
+      margin-bottom: 20px;
+      color: #ffffff;
+      font-size: 1.3em;
+    }
+
+    .bar-graph {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 15px;
+    }
+
+    .bar-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .bar-label {
+      min-width: 20px;
+      font-size: 0.9em;
+      color: #cccccc;
+      text-align: right;
+    }
+
+    .bar-container {
+      flex-grow: 1;
+      height: 25px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3d953d, #5eb75e);
+      border-radius: 4px;
+      transition: width 0.8s ease-in-out;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .bar-count {
+      color: white;
+      font-weight: bold;
+      font-size: 0.8em;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+    }
+
+    .total-players {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 0.9em;
+      color: #cccccc;
+    }
+
+    @media (max-width: 550px) {
+      .bar-label {
+        font-size: 0.8em;
+      }
+      .bar-container {
+        height: 22px;
+      }
+      .bar-count {
+        font-size: 0.7em;
+      }
+    }
   </style>
   
   <!-- Structured Data for SEO -->
@@ -382,6 +464,7 @@
     <h2 id="result-text"></h2>
     <button id="copy-results" onClick="copyToKeyboard()">Copy Results</button>
     <button id="play-again" onClick="location.reload()">Play Again</button>
+    <div id="community-results"></div>
     <div id="result-breakdown"></div>
   </div>
   <div class="rules" id="rules">
@@ -462,16 +545,34 @@
       return a;
     }
 
-    async function getCount() {
-      fetch('https://api.counterapi.dev/v1/asmrandle/plays')
-        .then(res => res.json())
-        .then(data => {
-          console.log(`Game has been played ${data.value} times.`);
-      });
+    async function getCount(score) {
+      try {
+        const response = await fetch(`https://api.counterapi.dev/v1/asmrandle/daily${score}`);
+        const data = await response.json();
+        
+        // Check if last updated date is yesterday, if so return 0 and reset the counter
+        // note updated_at is in UTC while we want to check against Central Time
+        const lastUpdated = new Date(data.updated_at);
+        const centralLastUpdated = new Date(lastUpdated.toLocaleString("en-US", { timeZone: "America/Chicago" }));
+        const today = new Date().toLocaleDateString("en-US", { timeZone: "America/Chicago" });
+        if (centralLastUpdated.toDateString() !== today) {
+          fetch(`https://api.counterapi.dev/v1/asmrandle/daily${score}/set?count=0`).catch(() => {
+            // Ignore any errors
+          });
+          return 0;
+        }
+        return data.count;
+      } catch (error) {
+        console.error(`Error fetching count for score ${score}:`, error);
+        return 0;
+      }
     }
 
-    function increaseCount() {
+    function increaseCount(score = 0) {
       fetch('https://api.counterapi.dev/v1/asmrandle/plays/up').catch(() => {
+        // Ignore any errors
+      });
+      fetch(`https://api.counterapi.dev/v1/asmrandle/daily${score}/up`).catch(() => {
         // Ignore any errors
       });
     }
@@ -562,6 +663,92 @@
       return Promise.all(promises);
     }
 
+    async function showCommunityResults() {
+      const communityResults = document.getElementById("community-results");
+      
+      // Clear any existing content
+      communityResults.innerHTML = '';
+      
+      try {
+        // Fetch all counts concurrently
+        const countPromises = [];
+        for (let i = 1; i <= 10; i++) {
+          countPromises.push(getCount(i));
+        }
+        
+        const counts = await Promise.all(countPromises);
+        
+        // Calculate total players
+        const totalPlayers = counts.reduce((sum, count) => sum + count, 0);
+
+        if (totalPlayers === 0) {
+          communityResults.style.display = "none"; // Hide if no data
+          return;
+        } else {
+          communityResults.style.display = "block"; // Show if data exists
+        }
+        // Add title
+        const title = document.createElement("h4");
+        title.textContent = "Today's Community Results";
+        communityResults.appendChild(title);
+        
+        // Find max count for scaling bars
+        const maxCount = Math.max(...counts, 1); // Ensure at least 1 to avoid division by zero
+        
+        // Create bar graph container
+        const barGraph = document.createElement("div");
+        barGraph.className = "bar-graph";
+        
+        // Create bars for scores 1-10
+        for (let i = 0; i < 10; i++) {
+          const score = i + 1;
+          const count = counts[i];
+          const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+          
+          // Create bar item container
+          const barItem = document.createElement("div");
+          barItem.className = "bar-item";
+          
+          // Create label
+          const barLabel = document.createElement("div");
+          barLabel.className = "bar-label";
+          barLabel.textContent = `${score}`;
+          
+          // Create bar container
+          const barContainer = document.createElement("div");
+          barContainer.className = "bar-container";
+          
+          // Create bar fill
+          const barFill = document.createElement("div");
+          barFill.className = "bar-fill";
+          barFill.style.width = `${percentage}%`;
+          
+          // Create count text
+          const barCount = document.createElement("span");
+          barCount.className = "bar-count";
+          barCount.textContent = count > 0 ? count.toString() : '';
+          
+          // Assemble the bar
+          barFill.appendChild(barCount);
+          barContainer.appendChild(barFill);
+          barItem.appendChild(barLabel);
+          barItem.appendChild(barContainer);
+          barGraph.appendChild(barItem);
+        }
+        
+        communityResults.appendChild(barGraph);
+        
+        // Add total players count
+        const totalDiv = document.createElement("div");
+        totalDiv.className = "total-players";
+        totalDiv.textContent = `Total players today: ${totalPlayers}`;
+        communityResults.appendChild(totalDiv);
+        
+      } catch (error) {
+        console.error("Error loading community results:", error);
+      }
+    }
+
     function showResultBreakdown() {
       const resultBreakdown = document.getElementById("result-breakdown");
       for (let i = 0; i < 10; i++) {
@@ -641,6 +828,7 @@
           resultToCopy += ` | ${dateStr} | https://asmrandle.com`;
           gameArea.style.display = "none";
           result.style.display = "block";
+          showCommunityResults();
           showResultBreakdown();
           return;
         }
@@ -676,12 +864,13 @@
     }
 
     function saveResults() {
-        increaseCount();
         if (gameType === 1) {
+          increaseCount(correctCount);
           copyResultsBtn.style.display = "inline-block";
           setCookie(`${dateStrSanatized}`, `${resultArray}|${correctCount}`, 30); // Set cookie for 30 days
           showResults();
         } else {
+          increaseCount();
           copyResultsBtn.style.display = "none";
           showResults();
         }
@@ -694,6 +883,7 @@
       if (gameType === 1) {
         resultText.textContent = `Asmrandle, ${dateStr} | ${correctCount}/10 correct`;
         resultToCopy += ` ${correctCount}/10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`
+        showCommunityResults();
       } else {
         resultText.textContent = `You got ${correctCount}/10 correct.`;
       }
