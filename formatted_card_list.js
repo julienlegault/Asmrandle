@@ -1,5 +1,4 @@
 // Card list as a global variable for local testing
-
 window.cardList = [
   "azra-bladeseeker",
   "axgard-armory",

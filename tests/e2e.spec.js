@@ -137,6 +137,41 @@ test.describe('Asmrandle E2E Tests', () => {
         expect(resultsText).toContain('🟩🟩🟩🟩🟩🟥🟥🟥🟥🟥 5/10');
     });
 
+    test('Play full game', async ({ page }) => {
+        test.setTimeout(2 * 60 * 1000); // Extend timeout to 2 minutes
+        await page.goto('http://localhost:3000');
+        
+        // Start a practice game
+        await page.click('#play-random');
+        
+        // Wait for game to load
+        await page.waitForSelector('#game', { timeout: 10000 });
+        
+        // Play through all 10 cards
+        for (let i = 0; i < 10; i++) {
+            // Wait for cards to load
+            await page.waitForSelector('.card img', { timeout: 15000 });
+            
+            // Click on the first card
+            await page.click('.card:first-child');
+            
+            // Wait for overlay to appear and disappear
+            await page.waitForSelector('.overlay', { timeout: 5000 });
+            await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
+        }
+        
+        // After 10 cards, check that results are shown
+        // save screenshot of results
+        await page.screenshot({ path: 'results.png' });
+        await page.waitForSelector('#result', { timeout: 10000 });
+        const resultsText = await page.locator('#result').innerText();
+        const resultsBreakdown = await page.locator('#result-breakdown');
+        expect(resultsText).toMatch(/\d+\/10/); // Should show score out of 10
+        expect(resultsBreakdown).toBeVisible(); // Should show breakdown of results
+        const resultItem = await page.locator('.result-item').first();
+        expect(resultItem).toBeVisible();
+    });
+
     test('Page performance and loading', async ({ page }) => {
         const startTime = Date.now();
         await page.goto('http://localhost:3000');
