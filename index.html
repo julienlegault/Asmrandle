@@ -607,12 +607,12 @@
           lastUpdatedCST = new Date(lastUpdatedUTC.getTime() + offsetMs);
         }
         
-        if (lastUpdatedCST < yesterdayMidnightCST) {
+        /**if (lastUpdatedCST < yesterdayMidnightCST) {
           counter.reset(`daily${score}`).catch(() => {
             // Ignore any errors
           });
           return 0;
-        } 
+        } **/
         return data.data.up_count;
       } catch (error) {
         console.error(`Error fetching count for score ${score}:`, error);
@@ -1050,6 +1050,7 @@
   </script>
 </body>
 </html>
+
 
 
 
