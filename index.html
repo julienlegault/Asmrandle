@@ -730,7 +730,7 @@
       return Promise.all(promises);
     }
 
-    async function showCommunityResults() {
+    async function showCommunityResults(replay=false) {
       const communityResults = document.getElementById("community-results");
       communityResults.innerHTML = "";
       
@@ -758,8 +758,10 @@
           communityResults.style.display = "block"; // Show if data exists
         }
 
-        totalPlayers++;
-        counts[correctCount]++;
+        if(!replay){
+           totalPlayers++;
+           counts[correctCount]++;
+        }
 
         // Add title
         const title = document.createElement("h4");
@@ -889,6 +891,7 @@
         if (todayCookie !== null) {
           await fetchAllCardData();
           resultArray = todayCookie.split("|")[0].split(",").map(item => item === 'true');
+          hardMode = todayCookie.split("|").includes("HM");
           if (resultArray.length !== 10) {
             resultArray = Array(10).fill(false);
           }
@@ -899,10 +902,10 @@
           }
           resultToCopy += ` ${correctCount}/10`;
           resultText.textContent = `You have already played today's Asmrandle! Come back tomorrow for a new challenge. Your score was ${resultToCopy}.`;
-          resultToCopy += ` | ${dateStr} | https://asmrandle.com`;
+          resultToCopy += ` ${hardMode?'| Hard Mode ':''}| ${dateStr} | https://asmrandle.com`;
           gameArea.style.display = "none";
           result.style.display = "block";
-          showCommunityResults();
+          showCommunityResults(true);
           showResultBreakdown();
           return;
         }
@@ -941,7 +944,7 @@
         if (gameType === 1) {
           increaseCount(correctCount);
           copyResultsBtn.style.display = "inline-block";
-          setCookie(`${dateStrSanatized}`, `${resultArray}|${correctCount}`, 30); // Set cookie for 30 days
+          setCookie(`${dateStrSanatized}`, `${resultArray}|${correctCount}${hardMode?'|HM':''}`, 30); // Set cookie for 30 days
           showResults();
         } else {
           increaseCount();
@@ -1044,4 +1047,5 @@
   </script>
 </body>
 </html>
+
 
