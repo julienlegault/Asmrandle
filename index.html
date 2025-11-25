@@ -753,7 +753,10 @@
         
         // Calculate total players
         let totalPlayers = counts.reduce((sum, count) => sum + count, 0);
-
+        if(counts[10]==0 && correctCount==10){
+           resultText.textContent = `Asmrandle, ${dateStr} | ✨ Today's first 10 ✨`;
+           resultToCopy = `✨✨✨✨✨✨✨✨✨✨ | Today's First 10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
+        }
         if (totalPlayers !== 0) {
           communityResults.style.display = "block"; // Show if data exists
         }
@@ -1047,5 +1050,6 @@
   </script>
 </body>
 </html>
+
 
 
