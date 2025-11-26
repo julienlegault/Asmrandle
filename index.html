@@ -576,18 +576,15 @@
       try {
         // Ensure counter is initialized (critical for Android Chrome)
         if (!counter) {
-          console.warn("Counter not initialized, creating new instance");
           counter = new Counter({workspace: "asmrandle"});
         }
         
         const data = await counter.get(`daily${score}`);
         return data.data.up_count;
       } catch (error) {
-        console.error(`Error fetching count for score ${score}:`, error);
         
         // Retry on mobile networks (common issue with Android Chrome)
         if (retries > 0) {
-          console.log(`Retrying getCount for score ${score}, ${retries} attempts remaining`);
           await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
           return getCount(score, retries - 1);
         }
@@ -598,7 +595,6 @@
     function increaseCount(score = -1) {
       // Ensure counter is initialized (critical for Android Chrome)
       if (!counter) {
-        console.warn("Counter not initialized in increaseCount, creating new instance");
         counter = new Counter({workspace: "asmrandle"});
       }
       
@@ -792,7 +788,6 @@
         communityResults.appendChild(totalDiv);
         
       } catch (error) {
-        console.error("Error loading community results:", error);
       }
     }
 

@@ -138,6 +138,7 @@ def write_javascript_format(card_list, filename):
     """Write the card list in the JavaScript format matching formatted_card_list.js"""
     with open(filename, "w", encoding="utf-8") as f:
         f.write("// Card list as a global variable for local testing\n")
+        f.write("// Updated at: {}\n\n".format(time.strftime("%Y-%m-%d %H:%M:%S")))
         f.write("window.cardList = [\n")
         
         for i, card in enumerate(card_list):
