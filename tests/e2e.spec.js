@@ -161,8 +161,6 @@ test.describe('Asmrandle E2E Tests', () => {
         }
         
         // After 10 cards, check that results are shown
-        // save screenshot of results
-        await page.screenshot({ path: 'results.png' });
         await page.waitForSelector('#result', { timeout: 10000 });
         const resultsText = await page.locator('#result').innerText();
         const resultsBreakdown = await page.locator('#result-breakdown');

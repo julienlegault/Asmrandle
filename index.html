@@ -581,38 +581,6 @@
         }
         
         const data = await counter.get(`daily${score}`);
-        
-        // Check if last updated was before yesterday's midnight CST, if so return 0 and reset the counter
-        // note updated_at is in UTC while we want to check against Central Time
-        const lastUpdatedUTC = new Date(data.data.updated_at);
-        const now = new Date();
-        
-        // More reliable date handling for mobile browsers
-        let yesterdayMidnightCST;
-        let lastUpdatedCST;
-        
-        try {
-          // Try modern approach first
-          const todayCST = new Date(now.toLocaleString("en-US", { timeZone: "America/Chicago" }));
-          yesterdayMidnightCST = new Date(todayCST.getFullYear(), todayCST.getMonth(), todayCST.getDate() - 1);
-          lastUpdatedCST = new Date(lastUpdatedUTC.toLocaleString("en-US", { timeZone: "America/Chicago" }));
-        } catch (e) {
-          // Fallback for older Android Chrome versions
-          console.warn("Timezone handling fallback:", e);
-          const offsetCST = -6; // CST is UTC-6 (will need manual DST adjustment)
-          const offsetMs = offsetCST * 60 * 60 * 1000;
-          yesterdayMidnightCST = new Date(now.getTime() + offsetMs);
-          yesterdayMidnightCST.setUTCHours(0, 0, 0, 0);
-          yesterdayMidnightCST.setUTCDate(yesterdayMidnightCST.getUTCDate() - 1);
-          lastUpdatedCST = new Date(lastUpdatedUTC.getTime() + offsetMs);
-        }
-        
-        /**if (lastUpdatedCST < yesterdayMidnightCST) {
-          counter.reset(`daily${score}`).catch(() => {
-            // Ignore any errors
-          });
-          return 0;
-        } **/
         return data.data.up_count;
       } catch (error) {
         console.error(`Error fetching count for score ${score}:`, error);

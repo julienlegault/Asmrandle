@@ -1,0 +1,42 @@
+name: Reset Daily Counters
+
+on:
+  schedule:
+    # Runs at 6:00 AM UTC (midnight CST)
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Allows manual triggering
+
+env:
+  COUNTER_API_KEY: ${{ secrets.COUNTER_API_KEY }}
+
+jobs:
+  reset-counters:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Reset Counter API counters
+      run: |
+        echo "Resetting daily counters for asmrandle workspace using CounterAPI v2..."
+        
+        # Check if API key is set
+        if [ -z "$COUNTER_API_KEY" ]; then
+          echo "ERROR: COUNTER_API_KEY secret is not set!"
+          echo "Please add your CounterAPI v2 API key as a repository secret named COUNTER_API_KEY"
+          exit 1
+        fi
+        
+        # Reset counters for scores 0-10 using v2 API
+        for i in {0..10}; do
+          echo "Resetting daily${i} counter..."
+          curl -X GET "https://api.counterapi.dev/v2/asmrandle/daily${i}/reset" \
+            -H "Authorization: Bearer $COUNTER_API_KEY" \
+            -w "HTTP Status: %{http_code}\n" || echo "Failed to reset daily${i}"
+          sleep 0.5  # Small delay to avoid rate limiting
+        done
+        
+        echo "All daily counters have been reset!"
+        
+    - name: Log reset completion
+      run: |
+        echo "Counter reset completed at $(date)"
+        echo "Next reset scheduled for tomorrow at midnight CST"
