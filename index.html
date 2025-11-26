@@ -338,27 +338,65 @@
       }
     }
 
-    /* Community results bar graph styles */
+    /* Community results styles with sliding animation */
     #community-results {
       display: none;
       margin: 30px auto;
       max-width: 600px;
-      padding: 15px;
       background: rgba(255, 255, 255, 0.1);
       border-radius: 12px;
+      overflow: hidden;
     }
 
-    #community-results h3 {
-      margin-bottom: 20px;
+    .community-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 15px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      user-select: none;
+    }
+
+    .community-header:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .community-header h4 {
+      margin: 0;
       color: #ffffff;
       font-size: 1.3em;
     }
+
+    .toggle-arrow {
+      font-size: 1.2em;
+      transition: transform 0.3s ease;
+      color: #cccccc;
+    }
+
+    .toggle-arrow.expanded {
+      transform: rotate(90deg);
+    }
+
+    .community-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s ease-out;
+      padding: 0 15px;
+    }
+
+    .community-content.expanded {
+      max-height: 500px;
+      padding: 0 15px 15px;
+    }
+
+
 
     .bar-graph {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      margin-bottom: 15px;
+      margin: 15px 0;
     }
 
     .bar-item {
@@ -394,6 +432,14 @@
       min-width: 0;
     }
 
+    .bar-fill-user {
+      background: linear-gradient(90deg, #4c8ea8, #4f82a8);
+    }
+
+    .bar-fill-first10 {
+      background: linear-gradient(90deg, #fda325, #fdc313);
+    }
+
     .bar-count {
       color: white;
       font-weight: bold;
@@ -412,7 +458,18 @@
     @media (max-width: 550px) {
       #community-results {
         margin: 20px 10px;
-        padding: 10px;
+      }
+      
+      .community-header {
+        padding: 12px;
+      }
+      
+      .community-header h4 {
+        font-size: 1.1em;
+      }
+      
+      .community-content.expanded {
+        padding: 0 12px 12px;
       }
       .bar-label {
         font-size: 0.8em;
@@ -484,6 +541,7 @@
   <div class="game-area" id="game"></div>
   <div id="result">
     <h2 id="result-text"></h2>
+    <h3 id="time-to-next-daily"></h3>
     <button id="copy-results" onClick="copyToKeyboard()">Copy Results</button>
     <button id="play-again" onClick="location.reload()">Play Again</button>
     <div id="community-results"></div>
@@ -512,6 +570,7 @@
     const gameArea = document.getElementById("game");
     const result = document.getElementById("result");
     const resultText = document.getElementById("result-text");
+    const timeToNextDaily = document.getElementById("time-to-next-daily");
     const copyResultsBtn = document.getElementById("copy-results");
     const rules = document.getElementById("rules");
 
@@ -645,6 +704,51 @@
       }
       return length;
     }
+
+    function getTimeToNextDaily() {
+      const now = new Date();
+      const centralNow = new Date(now.toLocaleString("en-US", {timeZone: "America/Chicago"}));
+      const nextDaily = new Date(centralNow);
+      nextDaily.setHours(24, 0, 0, 0); // Set to midnight next day
+      const diffMs = nextDaily - centralNow;
+      const hours = Math.floor(diffMs / (1000 * 60 * 60));
+      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+      return {
+        formatted: `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`,
+        milliseconds: diffMs
+      };
+    }
+
+    function updateCountdown() {
+      if (timeToNextDaily && gameType === 1) {
+        const timeData = getTimeToNextDaily();
+        timeToNextDaily.textContent = `Time to next daily: ${timeData.formatted}`;
+        
+        // Stop countdown if less than 1 second remaining
+        if (timeData.milliseconds <= 1000) {
+          stopCountdown();
+          document.location.reload();
+        }
+      }
+    }
+
+    // Start countdown timer
+    let countdownInterval;
+    function startCountdown() {
+      if (gameType === 1) {
+        updateCountdown(); // Update immediately
+        countdownInterval = setInterval(updateCountdown, 1000); // Update every second
+      }
+    }
+
+    function stopCountdown() {
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+      }
+    }
+
     async function fetchCardData(idx) {
       const name = shuffled[idx++];
         try {
@@ -717,9 +821,11 @@
         
         // Calculate total players
         let totalPlayers = counts.reduce((sum, count) => sum + count, 0);
+        let isFirst10 = false;
         if(counts[10]==0 && correctCount==10){
-           resultText.textContent = `Asmrandle, ${dateStr} | ✨ Today's first 10 ✨`;
+           resultText.textContent = `${dateStr} | ✨ Today's first 10 ✨`;
            resultToCopy = `✨✨✨✨✨✨✨✨✨✨ | Today's First 10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
+           isFirst10 = true;
         }
         if (totalPlayers !== 0) {
           communityResults.style.display = "block"; // Show if data exists
@@ -730,10 +836,26 @@
            counts[correctCount]++;
         }
 
-        // Add title
+        // Create header with toggle functionality
+        const header = document.createElement("div");
+        header.className = "community-header";
+        header.onclick = toggleCommunityResults;
+        
         const title = document.createElement("h4");
         title.textContent = "Today's Community Results";
-        communityResults.appendChild(title);
+        
+        const arrow = document.createElement("span");
+        arrow.className = "toggle-arrow";
+        arrow.textContent = "▶";
+        
+        header.appendChild(title);
+        header.appendChild(arrow);
+        communityResults.appendChild(header);
+        
+        // Create content container
+        const content = document.createElement("div");
+        content.className = "community-content";
+        content.id = "community-content";
         
         // Find max count for scaling bars
         const maxCount = Math.max(...counts, 1); // Ensure at least 1 to avoid division by zero
@@ -763,7 +885,7 @@
           
           // Create bar fill
           const barFill = document.createElement("div");
-          barFill.className = "bar-fill";
+          barFill.className = `bar-fill ${score === correctCount ? 'bar-fill-user' : ''} ${isFirst10 ? 'bar-fill-first10' : ''}`;
           barFill.style.width = `${percentage}%`;
           
           // Create count text
@@ -779,15 +901,37 @@
           barGraph.appendChild(barItem);
         }
         
-        communityResults.appendChild(barGraph);
+        content.appendChild(barGraph);
         
         // Add total players count
         const totalDiv = document.createElement("div");
         totalDiv.className = "total-players";
-        totalDiv.textContent = `Total players today: ${totalPlayers}`;
-        communityResults.appendChild(totalDiv);
+        let betterThan = 0;
+        for (let i = 0; i < correctCount; i++) {
+          betterThan += counts[i];
+        }
+        totalDiv.textContent = `Total players today: ${totalPlayers} | You scored better than ${(betterThan / totalPlayers * 100).toFixed(2)}% of players`;
+        content.appendChild(totalDiv);
+        
+        // Append content to community results
+        communityResults.appendChild(content);
         
       } catch (error) {
+      }
+    }
+
+    function toggleCommunityResults() {
+      const content = document.getElementById("community-content");
+      const arrow = document.querySelector(".toggle-arrow");
+      
+      if (content && arrow) {
+        if (content.classList.contains("expanded")) {
+          content.classList.remove("expanded");
+          arrow.classList.remove("expanded");
+        } else {
+          content.classList.add("expanded");
+          arrow.classList.add("expanded");
+        }
       }
     }
 
@@ -867,7 +1011,8 @@
             resultToCopy += resultArray[i] ? "🟩" : "🟥";
           }
           resultToCopy += ` ${correctCount}/10`;
-          resultText.textContent = `You have already played today's Asmrandle! Come back tomorrow for a new challenge. Your score was ${resultToCopy}.`;
+          resultText.textContent = `You have already played today's Asmrandle! Your score was ${correctCount}/10.`;
+          startCountdown(); // Start the live countdown timer
           resultToCopy += ` ${hardMode?'| Hard Mode ':''}| ${dateStr} | https://asmrandle.com`;
           gameArea.style.display = "none";
           result.style.display = "block";
@@ -924,7 +1069,8 @@
       gameArea.style.display = "none";
       result.style.display = "block";
       if (gameType === 1) {
-        resultText.textContent = `Asmrandle, ${dateStr} | ${correctCount}/10 correct`;
+        resultText.textContent = `${dateStr} | ${correctCount}/10 correct`;
+        startCountdown(); // Start the live countdown timer
         resultToCopy += ` ${correctCount}/10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`
         showCommunityResults();
       } else {
