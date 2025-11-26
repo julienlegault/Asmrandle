@@ -721,7 +721,7 @@
     }
 
     function updateCountdown() {
-      if (timeToNextDaily && gameType === 1) {
+      if (timeToNextDaily) {
         const timeData = getTimeToNextDaily();
         timeToNextDaily.textContent = `Time to next daily: ${timeData.formatted}`;
         
@@ -736,10 +736,8 @@
     // Start countdown timer
     let countdownInterval;
     function startCountdown() {
-      if (gameType === 1) {
-        updateCountdown(); // Update immediately
-        countdownInterval = setInterval(updateCountdown, 1000); // Update every second
-      }
+      updateCountdown(); // Update immediately
+      countdownInterval = setInterval(updateCountdown, 1000); // Update every second
     }
 
     function stopCountdown() {
