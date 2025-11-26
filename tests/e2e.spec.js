@@ -134,7 +134,7 @@ test.describe('Asmrandle E2E Tests', () => {
 
         // Check that results reflect cookie values
         const resultsText = await page.locator('#result').innerText();
-        expect(resultsText).toContain('🟩🟩🟩🟩🟩🟥🟥🟥🟥🟥 5/10');
+        expect(resultsText).toContain("You have already played today's Asmrandle! Your score was 5/10.");
     });
 
     test('Play full game', async ({ page }) => {
