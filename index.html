@@ -705,6 +705,11 @@
       return length;
     }
 
+    function floorToDigits(num, digits) {
+       const factor = Math.max(10 ** digits, 10);
+       return Math.floor(num * factor) / factor;
+    }
+    
     function getTimeToNextDaily() {
       const now = new Date();
       const centralNow = new Date(now.toLocaleString("en-US", {timeZone: "America/Chicago"}));
@@ -964,7 +969,7 @@
         }
         const overlay1 = document.createElement("div");
         overlay1.className = "result-popularity-overlay";
-        overlay1.textContent = `${card.popularity.toFixed(getDigitLength(card, card2))}%`;
+        overlay1.textContent = `${floorToDigits(card.popularity, getDigitLength(card, card2))}%`;
         card1Container.appendChild(img1);
         card1Container.appendChild(overlay1);
         
@@ -980,7 +985,7 @@
         }
         const overlay2 = document.createElement("div");
         overlay2.className = "result-popularity-overlay";
-        overlay2.textContent = `${card2.popularity.toFixed(getDigitLength(card2, card))}%`;
+        overlay2.textContent = `${floorToDigits(card2.popularity, getDigitLength(card2, card))}%`;
         card2Container.appendChild(img2);
         card2Container.appendChild(overlay2);
         
@@ -1121,7 +1126,7 @@
         const higherPopularity = cardData[currentPair*2].popularity > cardData[currentPair*2+1].popularity;
         const color = higherPopularity && card === cardData[currentPair*2] || !higherPopularity && card === cardData[currentPair*2+1] ? "rgba(0,128,0,0.6)" : "rgba(128,0,0,0.6)";
         overlay.style.background = color;
-        overlay.textContent = `${card.popularity.toFixed(getDigitLength(card, cardData[currentPair*2 + (i === 0 ? 1 : 0)]))}%`;
+        overlay.textContent = `${floorToDigits(card.popularity, getDigitLength(card, cardData[currentPair*2 + (i === 0 ? 1 : 0)]))}%`;
         c.appendChild(overlay);
         overlays.push(overlay);
       });
@@ -1157,6 +1162,7 @@
   </script>
 </body>
 </html>
+
 
 
 
