@@ -198,8 +198,7 @@ def main():
         time.sleep(REQUEST_DELAY)
 
     # Write in JavaScript format matching the existing file structure
-    if  new_cards_found > 0:
-        write_javascript_format(formatted, OUTPUT_FILE)
+    write_javascript_format(formatted, OUTPUT_FILE)
 
     print(f"\n✅ Finished!")
     print(f"   Total cards in list: {len(formatted):,}")
