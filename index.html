@@ -771,7 +771,7 @@
               if (!scryfallRes.ok) return fetchCardData(20 +idx);
               const scryfallData = await scryfallRes.json();
               flavorText = scryfallData?.flavor_text || "No flavor text available";
-              artImg = scryfallData?.image_uris?.art_crop || imageUrl;
+              artImg = scryfallData?.image_uris?.art_crop || scryfallData?.card_faces?.[0]?.image_uris?.art_crop || imageUrl;
             } catch (err) {
               return fetchCardData(20 +idx);
             }

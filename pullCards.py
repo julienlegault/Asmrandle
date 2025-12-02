@@ -12,6 +12,8 @@ SCRYFALL_BULK_DATA_URL = "https://api.scryfall.com/bulk-data"
 # Delay between API checks to avoid hammering EDHREC
 REQUEST_DELAY = 0.2  # seconds
 
+fully_banned_cards = ["cleanse", "crusade", "jihad", "imprison", "invoke-prejudice", "pradesh-gypsies", "stone-throwing-devils"]
+
 def download_oracle_cards():
     """Download the latest oracle cards from Scryfall."""
     print("🔄 Fetching Scryfall bulk data info...")
@@ -182,7 +184,7 @@ def main():
         norm = normalize_name(card_name)
 
         # Skip if we've already seen this card (existing or duplicate)
-        if norm in seen or card.get("legalities").get("commander") != "legal":
+        if norm in seen or card.get("legalities").get("commander") != "legal" or norm in fully_banned_cards:
             continue
 
         new_cards_checked += 1
