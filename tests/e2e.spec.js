@@ -137,6 +137,51 @@ test.describe('Asmrandle E2E Tests', () => {
         expect(resultsText).toContain("You have already played today's Asmrandle! Your score was 5/10.");
     });
 
+    // Hard cookie retrieval test
+    test('Hard mode cookie retrieved correctly and used', async ({ page }) => {
+        await page.goto('http://localhost:3000');
+
+        // Use the current date (YYYYMMDD) in Central Time as a seed
+        // We use Intl.DateTimeFormat with the "America/Chicago" timezone so the daily seed follows Central Time (CST/CDT)
+        const now = new Date();
+        const centralFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+        });
+        const parts = centralFormatter.formatToParts(now);
+        const getPart = (type) => parts.find(p => p.type === type)?.value || '';
+        const yyyy = getPart('year');
+        const mm = getPart('month');
+        const dd = getPart('day');
+        const todaysDate = `${yyyy}${mm}${dd}`;
+
+        // Set daily cookie to a known value
+        await page.context().addCookies([{
+            name: todaysDate,
+            value: 'true,true,true,true,true,false,false,false,false,false|5|HM',
+            domain: 'localhost',
+            path: '/'
+        }]);
+
+        // Reload page to pick up cookie
+        await page.reload();
+
+        // Start daily game
+        await page.click('#start-daily');
+
+        await page.waitForSelector('#result', { timeout: 10000 });
+
+        // Check that results reflect cookie values
+        const resultsText = await page.locator('#result').innerText();
+        expect(resultsText).toContain("You have already played today's Asmrandle! Your score was 5/10.");
+        // Check the copy indicates hard mode
+        await page.click('#copy-results');
+        const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+        expect(clipboardText).toContain('| Hard Mode |');
+    });
+
     test('Play full game', async ({ page }) => {
         test.setTimeout(2 * 60 * 1000); // Extend timeout to 2 minutes
         await page.goto('http://localhost:3000');
@@ -168,6 +213,35 @@ test.describe('Asmrandle E2E Tests', () => {
         expect(resultsBreakdown).toBeVisible(); // Should show breakdown of results
         const resultItem = await page.locator('.result-item').first();
         expect(resultItem).toBeVisible();
+    });
+
+    // Test that the community results section of the page loads correctly
+    test('Community results page loads correctly', async ({ page }) => {
+        await page.goto('http://localhost:3000');
+
+        await page.context().addCookies([{
+            name: todaysDate,
+            value: 'true,true,true,true,true,false,false,false,false,false|5',
+            domain: 'localhost',
+            path: '/'
+        }]);
+
+        // Reload page to pick up cookie
+        await page.reload();
+
+        // Check that community results section is visible
+        const communitySection = page.locator('#community-results');
+        await expect(communitySection).toBeVisible();
+        // Check that at least one bar on the graph is present
+        const bars = communitySection.locator('.bar-item');
+        await expect(bars).toHaveCountGreaterThan(0);
+        // Check that statistics are shown
+        const totalPlayers = communitySection.locator('.total-players');
+        await expect(totalPlayers).toBeVisible();
+        // Check that user's score is shown
+        const userNormal = communitySection.locator('.bar-fill-user');
+        const userHard = communitySection.locator('.bar-fill-hard-user');
+        await expect(userNormal).toBeVisible().or.expect(userHard).toBeVisible();
     });
 
     test('Page performance and loading', async ({ page }) => {
