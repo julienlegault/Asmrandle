@@ -200,7 +200,22 @@ def main():
         time.sleep(REQUEST_DELAY)
 
     # Write in JavaScript format matching the existing file structure
-    write_javascript_format(formatted, OUTPUT_FILE)
+
+    if new_cards_found <= 0:
+        # only edit the timestamp if no new cards were found
+        # reopen the existing file in in-place mode and update the timestamp line
+        print("\n⚠️  No new cards found, updating timestamp only.")
+        with open(OUTPUT_FILE, "r+", encoding="utf-8") as f:
+            content = f.readlines()
+            f.seek(0)
+            for line in content:
+                if line.startswith("// Updated at:"):
+                    f.write("// Updated at: {}\n\n".format(time.strftime("%Y-%m-%d %H:%M:%S")))
+                else:
+                    f.write(line)
+            f.truncate()
+    else:
+        write_javascript_format(formatted, OUTPUT_FILE)
 
     print(f"\n✅ Finished!")
     print(f"   Total cards in list: {len(formatted):,}")
