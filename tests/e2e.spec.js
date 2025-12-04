@@ -273,7 +273,7 @@ test.describe('Asmrandle E2E Tests', () => {
         // Check that community results section is visible
         const communitySection = page.locator('#community-results');
         await expect(communitySection).toBeVisible();
-        
+
         // Scroll until community results section is in view
         const totalPlayers = communitySection.locator('.total-players');
         await totalPlayers.scrollIntoViewIfNeeded();
@@ -281,11 +281,23 @@ test.describe('Asmrandle E2E Tests', () => {
 
         // Check that at least one bar on the graph is present
         const bars = communitySection.locator('.bar-item');
-        await expect(bars).toHaveCountGreaterThan(0);
-        // Check that user's score is shown
+        const barCount = await bars.count();
+        expect(barCount).toBeGreaterThan(0);
+        // Check that user's score is shown (either normal or hard mode)
         const userNormal = communitySection.locator('.bar-fill-user');
         const userHard = communitySection.locator('.bar-fill-hard-user');
-        await expect(userNormal).toBeVisible().or.expect(userHard).toBeVisible();
+        
+        // Check if either user normal or user hard bar is visible
+        const userNormalCount = await userNormal.count();
+        const userHardCount = await userHard.count();
+        
+        if (userNormalCount > 0) {
+            await expect(userNormal).toBeVisible();
+        } else if (userHardCount > 0) {
+            await expect(userHard).toBeVisible();
+        } else {
+            throw new Error('Neither normal nor hard mode user bar is present');
+        }
     });
 
     test('Page performance and loading', async ({ page }) => {
