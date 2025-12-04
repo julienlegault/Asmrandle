@@ -172,7 +172,7 @@ test.describe('Asmrandle E2E Tests', () => {
 
     test('Hard mode cookie retrieved correctly and used', async ({ page, context }) => {
         // Grant clipboard permissions
-        await context.grantPermissions(['clipboard-read']);
+        await context.grantPermissions(['clipboard-read', 'clipboard-write']);
         await page.goto('http://localhost:3000');
 
         // Use the current date (YYYYMMDD) in Central Time as a seed
@@ -246,6 +246,11 @@ test.describe('Asmrandle E2E Tests', () => {
         // Reload page to pick up cookie
         await page.reload();
 
+        // Wait 5 seconds to ensure community results are fetched
+        await page.waitForTimeout(5000);
+
+        // Navigate to community results
+        await page.click('#community-results');
         // Check that community results section is visible
         const communitySection = page.locator('#community-results');
         await expect(communitySection).toBeVisible();
