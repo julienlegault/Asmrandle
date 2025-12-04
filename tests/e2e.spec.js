@@ -249,6 +249,8 @@ test.describe('Asmrandle E2E Tests', () => {
         // Wait 5 seconds to ensure community results are fetched
         await page.waitForTimeout(5000);
 
+        // screenshot for debugging
+        await page.screenshot({ path: 'community_results.png' });
         // Navigate to community results
         await page.click('#community-results');
         // Check that community results section is visible
