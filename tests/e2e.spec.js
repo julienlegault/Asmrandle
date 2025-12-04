@@ -265,6 +265,10 @@ test.describe('Asmrandle E2E Tests', () => {
 
         // Navigate to community results
         await page.click('#community-results');
+
+        // Wait for community results animation to finish
+        await page.waitForTimeout(3000);
+        
         // Check that community results section is visible
         const communitySection = page.locator('#community-results');
         await expect(communitySection).toBeVisible();
