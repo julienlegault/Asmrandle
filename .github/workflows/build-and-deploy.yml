@@ -8,8 +8,8 @@ on:
     types: [ closed ]
   workflow_dispatch:  # Allow manual triggering
   schedule:
-    # Run on the 1st day of every month at 2:00 AM UTC
-    - cron: '0 2 1 * *'
+    # Run on the 1st day of every month at 6:00 AM UTC (midnight CST) with 20 minutes to run the program
+    - cron: '39 5 1 * *'
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:

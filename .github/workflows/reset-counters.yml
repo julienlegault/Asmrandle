@@ -2,8 +2,8 @@ name: Reset Daily Counters
 
 on:
   schedule:
-    # Runs at 6:00 AM UTC (midnight CST)
-    - cron: '0 6 * * *'
+    # Runs at 5:58 AM UTC (midnight CST) with a few minutes to run the program
+    - cron: '58 5 * * *'
   workflow_dispatch: # Allows manual triggering
 
 env:
@@ -31,6 +31,9 @@ jobs:
           curl -X GET "https://api.counterapi.dev/v2/asmrandle/daily${i}/reset" \
             -H "Authorization: Bearer $COUNTER_API_KEY" \
             -w "HTTP Status: %{http_code}\n" || echo "Failed to reset daily${i}"
+          curl -X GET "https://api.counterapi.dev/v2/asmrandle/dailyhm${i}/reset" \
+            -H "Authorization: Bearer $COUNTER_API_KEY" \
+            -w "HTTP Status: %{http_code}\n" || echo "Failed to reset dailyhm${i}"
           sleep 0.5  # Small delay to avoid rate limiting
         done
         
