@@ -2,6 +2,17 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('Asmrandle E2E Tests', () => {
     
+    test.afterEach(async ({ page }, testInfo) => {
+        if (testInfo.status !== testInfo.expectedStatus) {
+            // Get a unique place for the screenshot.
+            const screenshotPath = testInfo.outputPath(`failure.png`);
+            // Add it to the report.
+            testInfo.attachments.push({ name: 'screenshot', path: screenshotPath, contentType: 'image/png' });
+            // Take the screenshot itself.
+            await page.screenshot({ path: screenshotPath, timeout: 5000 });
+        }
+    });
+
     test('Homepage loads correctly', async ({ page }) => {
         await page.goto('http://localhost:3000');
         
@@ -249,8 +260,6 @@ test.describe('Asmrandle E2E Tests', () => {
         // Wait 5 seconds to ensure community results are fetched
         await page.waitForTimeout(5000);
 
-        // screenshot for debugging
-        await page.screenshot({ path: 'community_results.png' });
         // Navigate to community results
         await page.click('#community-results');
         // Check that community results section is visible
