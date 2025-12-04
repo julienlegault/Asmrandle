@@ -257,6 +257,9 @@ test.describe('Asmrandle E2E Tests', () => {
         // Reload page to pick up cookie
         await page.reload();
 
+        // Start daily game
+        await page.click('#start-daily');
+
         // Wait 5 seconds to ensure community results are fetched
         await page.waitForTimeout(5000);
 
