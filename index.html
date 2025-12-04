@@ -638,6 +638,10 @@
     let hardMode = false;
     let resultArray = [];
 
+    // Configuration for development vs production
+    const isLocalHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '';
+    const CARD_DISPLAY_TIME = isLocalHost ? 200 : 2800;
+
     // Use the current date (YYYYMMDD) in Central Time as a seed
     // We use Intl.DateTimeFormat with the "America/Chicago" timezone so the daily seed follows Central Time (CST/CDT)
     const now = new Date();
@@ -1287,7 +1291,7 @@
           cardData[idx2] = data2;
       });
       const elapsed = Date.now() - startWait;
-      const waitTime = Math.max(2800 - elapsed, 0);
+      const waitTime = Math.max(CARD_DISPLAY_TIME - elapsed, 0);
       setTimeout(() => {
         overlays.forEach(o => o.remove());
         showNextPair();
