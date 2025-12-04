@@ -269,14 +269,16 @@ test.describe('Asmrandle E2E Tests', () => {
         // Wait for community results animation to finish
         await page.waitForTimeout(3000);
 
+        
+        // Check that community results section is visible
+        const communitySection = page.locator('#community-results');
+        await expect(communitySection).toBeVisible();
+        
         // Scroll until community results section is in view
         const totalPlayers = communitySection.locator('.total-players');
         await totalPlayers.scrollIntoViewIfNeeded();
         await expect(totalPlayers).toBeVisible();
 
-        // Check that community results section is visible
-        const communitySection = page.locator('#community-results');
-        await expect(communitySection).toBeVisible();
         // Check that at least one bar on the graph is present
         const bars = communitySection.locator('.bar-item');
         await expect(bars).toHaveCountGreaterThan(0);
