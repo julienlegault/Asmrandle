@@ -57,7 +57,7 @@
       width: 20px;
       height: 20px;
       border-radius: 50%;
-      background: gray;
+      background: #928b83;
     }
     .game-area {
       display: flex;
@@ -98,14 +98,38 @@
       text-align: center;
     }
     .edhrec-link {
-      color: #646cdd;
+      color: #a097e4;
     }
     .edhrec-link:visited {
-      color: #8053b4;
+      color: #c8359b;
     }
-    h1 {
-      font-size: 3em;
+    .main-logo{
+      width: min(600px, 90vw);
       margin-top: 20px;
+      margin-bottom: 15px;
+    }
+    
+    /* Logo size variants */
+    .logo-full {
+      content: url('images/Logo-Full-Size.png');
+    }
+    
+    .logo-small {
+      content: url('images/Logo-Small.png');
+    }
+
+    .logo-play {
+      width: min(350px, 100vw);
+      content: url('images/Logo-Small.png');
+      margin-top: 5px;
+      margin-bottom: 0px;
+    }
+    
+    /* Responsive behavior for full logo */
+    @media (max-width: 550px) {
+      .logo-full {
+        content: url('images/Logo-Small.png');
+      }
     }
     button {
       padding: 10px 20px;
@@ -118,33 +142,33 @@
       transition: background-color 0.3s;
     }
     #start-daily {
-      background-color: #2a9d8f;
+      background-color: #63a452;
     }
     #start-daily:hover {
-      background-color: #3cbca9;
+      background-color: #75c760;
     }
     #play-random {
-      background-color: #e76f51;
+      background-color: #f4440a;
     }
     #play-random:hover {
-      background-color: #f08061;
+      background-color: #df743a;
     }
     #result {
       display: none;
       margin-top: 40px;
     }
     #copy-results {
-      background-color: #264653;
+      background-color: #4400e2;
     }
     #copy-results:hover {
-      background-color: #3a5a73;
+      background-color: #3f0bc1;
     }
     #play-again {
-      background-color: #3d953d;
+      background-color: #63a452;
       color: black;
     }
     #play-again:hover {
-      background-color: #5eb75e;
+      background-color: #75c760;
     }
 
     .flavorOverlay {
@@ -177,9 +201,6 @@
       .card img {
         width: min(250px, calc(100vw - 40px));
         max-width: 250px;
-      }
-      h1 {
-        font-size: 2.5em;
       }
       .footer {
         position: static; /* Normal flow on narrow screens */
@@ -263,11 +284,11 @@
     }
 
     .result-item-winner {
-      background: rgba(74, 222, 128, 0.25);
+      background: rgba(45, 102, 32, 0.25);
     }
 
     .result-item-loser {
-      background: rgba(239, 68, 68, 0.25);
+      background: rgba(207, 45, 41, 0.25);
     }
     .result-card {
       position: relative;
@@ -281,11 +302,11 @@
     }
 
     .result-winner img {
-      border: 3px solid #4ade80;
+      border: 3px solid #75c760;
     }
 
     .result-loser img {
-      border: 3px solid #ef4444;
+      border: 3px solid #b91a14;
     }
 
     .result-popularity-overlay {
@@ -304,12 +325,12 @@
     }
 
     .result-winner .result-popularity-overlay {
-      background: rgba(74, 222, 128, 0.25);
+      background: rgba(65, 167, 42, 0.25);
       color: #ffffff;
     }
 
     .result-loser .result-popularity-overlay {
-      background: rgba(239, 68, 68, 0.25);
+      background: rgba(207, 45, 41, 0.25);
       color: #ffffff;
     }
 
@@ -423,7 +444,7 @@
 
     .bar-fill {
       height: 100%;
-      background: linear-gradient(90deg, #3d953d, #5eb75e);
+      background: linear-gradient(90deg, #62a451, #b1e0a8);
       border-radius: 4px;
       transition: width 0.8s ease-in-out;
       display: flex;
@@ -438,7 +459,7 @@
       right: 0;
       top: 0;
       height: 100%;
-      background: linear-gradient(90deg, #8b5cf6, #a855f7);
+      background: linear-gradient(90deg, #9f3051, #c42757);
       border-top-right-radius: 4px;
       border-bottom-right-radius: 4px;
       transition: width 0.8s ease-in-out;
@@ -453,11 +474,11 @@
     }
 
     .bar-fill-first10 {
-      background: linear-gradient(90deg, #fda325, #fdc313);
+      background: linear-gradient(90deg, #ffb02f, #fec557);
     }
 
     .bar-fill-hard-first10 {
-      background: linear-gradient(90deg, #b45309, #d97706);
+      background: linear-gradient(90deg, #e18726, #ce7d24);
     }
 
     .bar-count {
@@ -499,11 +520,11 @@
     }
 
     .legend-normal {
-      background: linear-gradient(90deg, #3d953d, #5eb75e);
+      background: linear-gradient(90deg, #62a451, #b1e0a8);
     }
 
     .legend-hard {
-      background: linear-gradient(90deg, #8b5cf6, #a855f7);
+      background: linear-gradient(90deg, #9f3051, #c42757);
     }
 
     .legend-user {
@@ -581,7 +602,7 @@
   <script async src="https://cdn.jsdelivr.net/npm/counterapi/dist/counter.browser.min.js"></script>
 </head>
 <body>
-  <h1>Asmrandle</h1>
+  <img src="images/Logo-Full-Size.png" alt="Asmrandle" class="main-logo logo-full" id="main-logo">
   <div class="main-menu" id="main-menu">
     <div>
       <button id="start-daily" onClick="loadCards('daily')">Play Daily</button>
@@ -679,6 +700,12 @@
     // Convert the date string into a numeric seed
     let seed = dateStrSanatized;
     let rng = mulberry32(parseInt(seed));
+
+    // Logo switching functions
+    function switchToPlayLogo() {
+      const logo = document.getElementById('main-logo');
+      logo.className = 'main-logo logo-play';
+    }
 
     // Shuffle using the seeded RNG (Fisher-Yates)
     function shuffleSeeded(array, rng) {
@@ -1136,6 +1163,7 @@
     async function loadCards(type) {
       hardMode = document.querySelector("#hard-mode").checked;
       mainMenu.style.display = "none";
+      switchToPlayLogo();
       if (type === 'daily') {
         todayCookie = getCookie(`${dateStrSanatized}`);
         shuffled = shuffleSeeded(window.cardList, rng); // shuffle with seed for daily mode

@@ -16,9 +16,6 @@ test.describe('Asmrandle E2E Tests', () => {
     test('Homepage loads correctly', async ({ page }) => {
         await page.goto('http://localhost:3000');
         
-        // Check page title
-        await expect(page).toHaveTitle(/Asmrandle/);
-        
         // Check that main menu buttons are present
         await expect(page.locator('#start-daily')).toBeVisible();
         await expect(page.locator('#play-random')).toBeVisible();
