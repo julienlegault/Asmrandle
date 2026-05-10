@@ -928,17 +928,16 @@
            resultToCopy = `✨✨✨✨✨✨✨✨✨✨ | Today's First 10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
            isFirst10 = true;
         }
-        if (totalPlayers !== 0) {
-          communityResults.style.display = "block"; // Show if data exists
-        }
-
         if(!replay){
            totalPlayers++;
            if (hardMode) {
-             hardModeCounts[correctCount]++;
-           } else {
-             counts[correctCount]++;
-           }
+              hardModeCounts[correctCount]++;
+            } else {
+              counts[correctCount]++;
+            }
+        }
+        if (totalPlayers !== 0) {
+          communityResults.style.display = "block"; // Show if data exists
         }
 
         // Create header with toggle functionality
@@ -1068,7 +1067,8 @@
         for (let i = 0; i < correctCount; i++) {
           betterThan += counts[i] + hardModeCounts[i];
         }
-        totalDiv.textContent = `Total players today: ${totalPlayers} | You scored better than ${(betterThan / totalPlayers * 100).toFixed(2)}% of players`;
+        const betterThanPercent = totalPlayers > 0 ? (betterThan / totalPlayers * 100).toFixed(2) : "0.00";
+        totalDiv.textContent = `Total players today: ${totalPlayers} | You scored better than ${betterThanPercent}% of players`;
         content.appendChild(totalDiv);
         
         // Append content to community results
