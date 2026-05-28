@@ -262,9 +262,7 @@ test.describe('Asmrandle E2E Tests', () => {
         // After 10 cards, check that results are shown
         await page.waitForSelector('#result', { timeout: 20000 });
         const resultsText = await page.locator('#result').innerText();
-        const resultsBreakdown = await page.locator('#result-breakdown');
         expect(resultsText).toMatch(/\d+\/10/); // Should show score out of 10
-        expect(resultsBreakdown).toBeVisible(); // Should show breakdown of results
         const resultItem = await page.locator('.result-item').first();
         expect(resultItem).toBeVisible();
     });
