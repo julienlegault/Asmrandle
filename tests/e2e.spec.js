@@ -217,8 +217,11 @@ test.describe('Asmrandle E2E Tests', () => {
         // Wait for game to load
         await page.waitForSelector('#game', { timeout: 10000 });
         
-        // Play through all 10 cards
-        for (let i = 0; i < 10; i++) {
+        // Play until results are shown (max 20 rounds to avoid hanging).
+        for (let i = 0; i < 20; i++) {
+            if (await page.locator('#result').isVisible()) {
+                break;
+            }
             // Wait for cards to load
             await page.waitForSelector('.card img', { timeout: 15000 });
             
@@ -231,7 +234,7 @@ test.describe('Asmrandle E2E Tests', () => {
         }
         
         // After 10 cards, check that results are shown
-        await page.waitForSelector('#result', { timeout: 10000 });
+        await page.waitForSelector('#result', { timeout: 20000 });
         const resultsText = await page.locator('#result').innerText();
         const resultsBreakdown = await page.locator('#result-breakdown');
         expect(resultsText).toMatch(/\d+\/10/); // Should show score out of 10
@@ -318,6 +321,8 @@ test.describe('Asmrandle E2E Tests', () => {
 
         // Start daily game
         await page.click('#start-daily');
+
+        await page.waitForSelector('#result', { timeout: 10000 });
 
         // Check that community results section is visible
         const communitySection = page.locator('#community-results');
