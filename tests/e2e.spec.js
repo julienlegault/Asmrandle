@@ -1,7 +1,24 @@
 const { test, expect } = require('@playwright/test');
 
+// Mock response returned for all counterapi requests
+const COUNTER_API_MOCK = { data: { up_count: 5, down_count: 0 } };
+
 test.describe('Asmrandle E2E Tests', () => {
-    
+
+    test.beforeEach(async ({ page }) => {
+        // Intercept all CounterAPI requests so tests are isolated from the live API.
+        // counter.get() calls GET https://api.counterapi.dev/v2/{workspace}/{name}
+        // counter.up()  calls GET https://api.counterapi.dev/v2/{workspace}/{name}/up
+        // Both expect a JSON body of the form { data: { up_count: N } }.
+        await page.route('**/api.counterapi.dev/**', route =>
+            route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify(COUNTER_API_MOCK),
+            })
+        );
+    });
+
     test.afterEach(async ({ page }, testInfo) => {
         if (testInfo.status !== testInfo.expectedStatus) {
             // Get a unique place for the screenshot.
