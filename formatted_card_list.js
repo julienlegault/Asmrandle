@@ -1,5 +1,6 @@
 // Card list as a global variable for local testing
-// Updated at: 2026-05-01 06:43:04
+// Updated at: 2026-05-28 05:51:28
+
 
 window.cardList = [
   "spore-cloud",
