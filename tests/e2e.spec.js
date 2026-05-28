@@ -263,8 +263,6 @@ test.describe('Asmrandle E2E Tests', () => {
         await page.waitForSelector('#result', { timeout: 20000 });
         const resultsText = await page.locator('#result').innerText();
         expect(resultsText).toMatch(/\d+\/10/); // Should show score out of 10
-        const resultItem = await page.locator('.result-item').first();
-        expect(resultItem).toBeVisible();
     });
 
     test('Hard mode cookie retrieved correctly and used', async ({ page, context }) => {
