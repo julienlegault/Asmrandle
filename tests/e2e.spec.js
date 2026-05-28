@@ -2,6 +2,13 @@ const { test, expect } = require('@playwright/test');
 
 // Mock response returned for all counterapi requests
 const COUNTER_API_MOCK = { data: { up_count: 5, down_count: 0 } };
+const EDHREC_API_BASE = 'https://json.edhrec.com/pages/cards/';
+const SCRYFALL_API_BASE = 'https://api.scryfall.com/cards/';
+
+function getCardIndexFromUrl(url, base) {
+    const name = decodeURIComponent(url.replace(base, '').replace('.json', ''));
+    return name.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+}
 
 test.describe('Asmrandle E2E Tests', () => {
 
@@ -17,6 +24,44 @@ test.describe('Asmrandle E2E Tests', () => {
                 body: JSON.stringify(COUNTER_API_MOCK),
             })
         );
+
+        // Intercept EDHRec card data requests used for gameplay.
+        await page.route('**/json.edhrec.com/pages/cards/*.json', route => {
+            const index = getCardIndexFromUrl(route.request().url(), EDHREC_API_BASE);
+            const inclusion = 1000 + (index % 5000);
+            const potentialDecks = inclusion + 1000 + (index % 5000);
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    container: {
+                        json_dict: {
+                            card: {
+                                id: `mock-card-${index}`,
+                                inclusion: `${inclusion}`,
+                                potential_decks: `${potentialDecks}`,
+                                image_uris: [{ normal: `https://example.com/mock-${index}.jpg` }],
+                            },
+                        },
+                    },
+                }),
+            });
+        });
+
+        // Intercept Scryfall lookups used in hard mode.
+        await page.route('**/api.scryfall.com/cards/*', route => {
+            const index = getCardIndexFromUrl(route.request().url(), SCRYFALL_API_BASE);
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    flavor_text: `Mock flavor text ${index}`,
+                    image_uris: {
+                        art_crop: `https://example.com/mock-art-${index}.jpg`,
+                    },
+                }),
+            });
+        });
     });
 
     test.afterEach(async ({ page }, testInfo) => {
