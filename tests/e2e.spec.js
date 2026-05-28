@@ -255,8 +255,14 @@ test.describe('Asmrandle E2E Tests', () => {
             await page.click('.card:first-child');
             
             // Wait for overlay to appear and disappear
-            await page.waitForSelector('.overlay', { timeout: 2000 }).catch(() => null);
-            await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 }).catch(() => null);
+            try {
+                await page.waitForSelector('.overlay', { state: 'visible', timeout: 2000 });
+                await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
+            } catch (error) {
+                if (!(await page.locator('#result').isVisible())) {
+                    throw error;
+                }
+            }
         }
         
         // After 10 cards, check that results are shown
