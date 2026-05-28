@@ -1,9 +1,9 @@
 name: Reset Daily Counters
 
 on:
-  schedule:
+ # schedule:
     # Runs at 5:58 AM UTC (midnight CST) with a few minutes to run the program
-    - cron: '58 5 * * *'
+  #  - cron: '58 5 * * *'
   workflow_dispatch: # Allows manual triggering
 
 env:
