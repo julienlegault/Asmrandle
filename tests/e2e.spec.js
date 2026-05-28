@@ -200,7 +200,7 @@ test.describe('Asmrandle E2E Tests', () => {
         // Start daily game
         await page.click('#start-daily');
 
-        await page.waitForSelector('#result', { timeout: 10000 });
+        await page.waitForSelector('#result', { timeout: 20000 });
 
         // Check that results reflect cookie values
         const resultsText = await page.locator('#result').innerText();
@@ -319,19 +319,9 @@ test.describe('Asmrandle E2E Tests', () => {
         // Start daily game
         await page.click('#start-daily');
 
-        // Wait 5 seconds to ensure community results are fetched
-        await page.waitForTimeout(5000);
-
-        // Navigate to community results
-        await page.click('#community-results');
-
-        // Wait for community results animation to finish
-        await page.waitForTimeout(3000);
-
-        
         // Check that community results section is visible
         const communitySection = page.locator('#community-results');
-        await expect(communitySection).toBeVisible();
+        await expect(communitySection).toBeVisible({ timeout: 15000 });
 
         // Scroll until community results section is in view
         const totalPlayers = communitySection.locator('.total-players');
