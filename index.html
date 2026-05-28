@@ -928,6 +928,10 @@
            resultToCopy = `✨✨✨✨✨✨✨✨✨✨ | Today's First 10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
            isFirst10 = true;
         }
+        if (totalPlayers !== 0) {
+          communityResults.style.display = "block"; // Show if data exists
+        }
+
         if(!replay){
            totalPlayers++;
            if (hardMode) {
@@ -935,18 +939,6 @@
            } else {
              counts[correctCount]++;
            }
-        } else if (totalPlayers === 0) {
-           // No API data yet but user has already played: include their score for display
-           totalPlayers = 1;
-           if (hardMode) {
-             hardModeCounts[correctCount]++;
-           } else {
-             counts[correctCount]++;
-           }
-        }
-
-        if (totalPlayers !== 0) {
-          communityResults.style.display = "block"; // Show if data exists
         }
 
         // Create header with toggle functionality
