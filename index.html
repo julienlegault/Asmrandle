@@ -653,20 +653,13 @@
     const isLocalHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '';
     const CARD_DISPLAY_TIME = isLocalHost ? 200 : 2800;
 
-    // Use the current date (YYYYMMDD) in Central Time as a seed
-    // We use Intl.DateTimeFormat with the "America/Chicago" timezone so the daily seed follows Central Time (CST/CDT)
+    // Use a UTC date offset by 6 hours so the daily challenge resets at 6:00 UTC,
+    // matching when the play counters are reset.
     const now = new Date();
-    const centralFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Chicago',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
-    const parts = centralFormatter.formatToParts(now);
-    const getPart = (type) => parts.find(p => p.type === type)?.value || '';
-    const yyyy = getPart('year');
-    const mm = getPart('month');
-    const dd = getPart('day');
+    const adjustedNow = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+    const yyyy = adjustedNow.getUTCFullYear().toString();
+    const mm = String(adjustedNow.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(adjustedNow.getUTCDate()).padStart(2, '0');
     const dateStr = `${yyyy}-${mm}-${dd}`;
     const dateStrSanatized = `${yyyy}${mm}${dd}`;
     let counter;
@@ -798,10 +791,13 @@
     
     function getTimeToNextDaily() {
       const now = new Date();
-      const centralNow = new Date(now.toLocaleString("en-US", {timeZone: "America/Chicago"}));
-      const nextDaily = new Date(centralNow);
-      nextDaily.setHours(24, 0, 0, 0); // Set to midnight next day
-      const diffMs = nextDaily - centralNow;
+      // Next reset is at 6:00 UTC, matching when the play counters are reset
+      const nextDaily = new Date();
+      nextDaily.setUTCHours(6, 0, 0, 0);
+      if (nextDaily <= now) {
+        nextDaily.setUTCDate(nextDaily.getUTCDate() + 1);
+      }
+      const diffMs = nextDaily - now;
       const hours = Math.floor(diffMs / (1000 * 60 * 60));
       const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
       const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
