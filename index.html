@@ -111,12 +111,12 @@
     
     /* Logo size variants */
     .logo-full {
-      content: url('images/Logo-Splash.png');
+      content: url('images/Logo-Splash-Pride.png');
     }
 
     .logo-play {
       width: min(350px, 100vw);
-      content: url('images/Logo-Play.png');
+      content: url('images/Logo-Play-Pride.png');
       margin-top: 5px;
       margin-bottom: 0px;
     }
@@ -592,7 +592,7 @@
   <script async src="https://cdn.jsdelivr.net/npm/counterapi/dist/counter.browser.min.js"></script>
 </head>
 <body>
-  <img src="images/Logo-Splash.png" alt="Asmrandle" class="main-logo logo-full" id="main-logo">
+  <img src="images/Logo-Splash-Pride.png" alt="Asmrandle" class="main-logo logo-full" id="main-logo">
   <div class="main-menu" id="main-menu">
     <div>
       <button id="start-daily" onClick="loadCards('daily')">Play Daily</button>
@@ -683,6 +683,28 @@
     // Convert the date string into a numeric seed
     let seed = dateStrSanatized;
     let rng = mulberry32(parseInt(seed));
+    const juneFirstShuffledList = [
+      "chandra-torch-of-defiance",
+      "nissa-who-shakes-the-world",
+      "ral-zarek",
+      "tomik-wielder-of-law",
+      "rowan-kenrith",
+      "saheeli-rai",
+      "felothar-dawn-of-the-abzan",
+      "alesha-who-smiles-at-death",
+      "heiko-yamazaki-the-general",
+      "ashiok-nightmare-muse",
+      "joined-researchers",
+      "rapturous-moment",
+      "hallar-the-firefletcher",
+      "kynaios-and-tiro-of-meletis",
+      "tivit-seller-of-secrets",
+      "karn-the-great-creator",
+      "niko-light-of-hope",
+      "kirol-attentive-first-year",
+      "nissa-vastwood-seer",
+      "chandra-dressed-to-kill"
+    ];
 
     // Logo switching functions
     function switchToPlayLogo() {
@@ -1153,6 +1175,9 @@
       if (type === 'daily') {
         todayCookie = getCookie(`${dateStrSanatized}`);
         shuffled = shuffleSeeded(window.cardList, rng); // shuffle with seed for daily mode
+        if (mm === '06' && dd === '01') {
+          shuffled = juneFirstShuffledList;
+        }
         if (todayCookie !== null) {
           await fetchAllCardData();
           resultArray = todayCookie.split("|")[0].split(",").map(item => item === 'true');
@@ -1314,7 +1339,6 @@
   </script>
 </body>
 </html>
-
 
 
 
