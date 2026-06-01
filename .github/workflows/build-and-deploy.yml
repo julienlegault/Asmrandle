@@ -3,9 +3,6 @@ name: Build and Deploy
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
-    types: [ closed ]
   workflow_dispatch:  # Allow manual triggering
   schedule:
     # Run on the 1st day of every month at 6:00 AM UTC (midnight CST) with 20 minutes to run the program
