@@ -662,6 +662,7 @@
     const dd = String(adjustedNow.getUTCDate()).padStart(2, '0');
     const dateStr = `${yyyy}-${mm}-${dd}`;
     const dateStrSanatized = `${yyyy}${mm}${dd}`;
+    const juneFirstPerfectScorePattern = "🟧🟨🟩🟦🟪🟪🟦🟩🟨🟧";
     let counter;
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -720,6 +721,13 @@
         [a[i], a[j]] = [a[j], a[i]];
       }
       return a;
+    }
+
+    function getResultEmojiString() {
+      if (mm === '06' && dd === '01' && resultArray.length === 10 && resultArray.every(Boolean)) {
+        return juneFirstPerfectScorePattern;
+      }
+      return resultArray.map(isCorrect => isCorrect ? "🟩" : "🟥").join("");
     }
 
     async function getCount(score, hm = false, retries = 2) {
@@ -1186,10 +1194,7 @@
             resultArray = Array(10).fill(false);
           }
           correctCount = resultArray.filter(item => item).length;
-          resultToCopy = "";
-          for (let i = 0; i < 10; i++) {
-            resultToCopy += resultArray[i] ? "🟩" : "🟥";
-          }
+          resultToCopy = getResultEmojiString();
           resultToCopy += ` ${correctCount}/10`;
           resultText.textContent = `You have already played today's Asmrandle! Your score was ${correctCount}/10.`;
           startCountdown(); // Start the live countdown timer
@@ -1251,6 +1256,7 @@
       if (gameType === 1) {
         resultText.textContent = `${dateStr} | ${correctCount}/10 correct`;
         startCountdown(); // Start the live countdown timer
+        resultToCopy = getResultEmojiString();
         resultToCopy += ` ${correctCount}/10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`
         showCommunityResults();
       } else {
@@ -1339,7 +1345,6 @@
   </script>
 </body>
 </html>
-
 
 
 
