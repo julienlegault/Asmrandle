@@ -338,6 +338,14 @@
       z-index: 10;
     }
 
+    .question-correct-pct {
+      text-align: center;
+      font-size: 0.85em;
+      color: rgba(255, 255, 255, 0.7);
+      margin: -20px 0 20px;
+      font-style: italic;
+    }
+
     /* Responsive design for result breakdown */
     @media (max-width: 550px) {
       .result-item {
@@ -756,6 +764,23 @@
       }
     }
 
+    async function getQuestionCount(questionNum, retries = 2) {
+      try {
+        if (!counter) {
+          counter = new Counter({workspace: "asmrandle"});
+        }
+        const key = hardMode ? `correcthm${questionNum}` : `correct${questionNum}`;
+        const data = await counter.get(key);
+        return data.data.up_count;
+      } catch (error) {
+        if (retries > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return getQuestionCount(questionNum, retries - 1);
+        }
+        return null;
+      }
+    }
+
     function increaseCount(score = -1) {
       // Ensure counter is initialized (critical for Android Chrome)
       if (!counter) {
@@ -771,6 +796,12 @@
           counter.up(`daily${score}`).catch(() => {
             // Ignore any errors
           });
+        }
+        for (let i = 0; i < resultArray.length; i++) {
+          if (resultArray[i]) {
+            const slug = hardMode ? `correcthm${i + 1}` : `correct${i + 1}`;
+            counter.up(slug).catch(() => {});
+          }
         }
       }
       counter.up(`plays`).catch(() => {
@@ -944,6 +975,14 @@
           Promise.all(hardModePromises),
           timeoutPromise
         ]);
+
+        // Fetch per-question correct counts
+        const questionCountPromises = [];
+        for (let i = 1; i <= 10; i++) {
+          questionCountPromises.push(getQuestionCount(i));
+        }
+        const questionTimeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 8000));
+        const questionCounts = await Promise.race([Promise.all(questionCountPromises), questionTimeoutPromise]);
         
         // Calculate total players (normal + hard mode)
         let totalPlayers = 0;
@@ -1101,6 +1140,26 @@
         
         // Append content to community results
         communityResults.appendChild(content);
+
+        // Display per-question correct percentages under each pair of cards
+        if (questionCounts && totalPlayers > 0) {
+          const resultBreakdown = document.getElementById("result-breakdown");
+          const resultItems = resultBreakdown ? resultBreakdown.querySelectorAll(".result-item") : [];
+          for (let i = 0; i < 10; i++) {
+            let qCount = questionCounts[i];
+            if (qCount === null || !resultItems[i]) continue;
+            if (!replay && resultArray[i]) {
+              qCount++;
+            }
+            const pct = ((qCount / totalPlayers) * 100).toFixed(1);
+            const pctDiv = document.createElement("div");
+            pctDiv.className = "question-correct-pct";
+            pctDiv.textContent = hardMode
+              ? `${pct}% of hard mode players got this question correct`
+              : `${pct}% of players got this question correct`;
+            resultItems[i].insertAdjacentElement("afterend", pctDiv);
+          }
+        }
         
       } catch (error) {
       }
