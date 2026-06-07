@@ -4,6 +4,12 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:  # Allow manual triggering
+    inputs:
+      skip_pull_cards:
+        description: 'Skip the pull cards step'
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Run on the 1st day of every month at 6:00 AM UTC (midnight CST) with 20 minutes to run the program
     - cron: '39 5 1 * *'
@@ -21,7 +27,7 @@ concurrency:
 jobs:
   # Update card list job (only for scheduled runs or manual triggers)
   update-cards:
-    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.event.inputs.skip_pull_cards != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required to commit and push card list updates
