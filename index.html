@@ -1145,7 +1145,7 @@
         if (questionCounts && totalPlayers > 0) {
           const resultBreakdown = document.getElementById("result-breakdown");
           const resultItems = resultBreakdown ? resultBreakdown.querySelectorAll(".result-item") : [];
-          for (let i = 0; i < 10; i++) {
+          for (let i = 0; i < questionCounts.length; i++) {
             let qCount = questionCounts[i];
             if (qCount === null || !resultItems[i]) continue;
             if (!replay && resultArray[i]) {
