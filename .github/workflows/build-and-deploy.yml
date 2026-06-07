@@ -186,8 +186,13 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    needs: [update-cards, test]
+    if: >
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') &&
+      (needs.update-cards.result == 'success' || needs.update-cards.result == 'skipped') &&
+      needs.test.result == 'success'
     permissions:
       pages: write      # Required to deploy to GitHub Pages
       id-token: write   # Required for OIDC token to deploy
