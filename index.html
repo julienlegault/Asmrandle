@@ -1157,7 +1157,7 @@
             if (!replay && resultArray[i]) {
               qCount++;
             }
-            const pct = ((qCount / totalPlayers) * 100).toFixed(1);
+            const pct = Math.min(100, ((qCount / totalPlayers) * 100).toFixed(1));
             const pctDiv = document.createElement("div");
             pctDiv.className = "question-correct-pct";
             pctDiv.textContent = hardMode
