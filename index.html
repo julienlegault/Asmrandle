@@ -1147,6 +1147,8 @@
         // Append content to community results
         communityResults.appendChild(content);
 
+        const hardModePlayers = hardModeCounts.reduce((sum, count) => sum + count, 0);
+
         // Display per-question correct percentages under each pair of cards
         if (questionCounts && totalPlayers > 0) {
           const resultBreakdown = document.getElementById("result-breakdown");
@@ -1157,7 +1159,10 @@
             if (!replay && resultArray[i]) {
               qCount++;
             }
-            const pct = Math.min(100, ((qCount / totalPlayers) * 100).toFixed(1));
+            const playersForMode = hardMode ? hardModePlayers : totalPlayers;
+            const pct = playersForMode > 0
+              ? Math.min(100, ((qCount / playersForMode) * 100).toFixed(1))
+              : 0;
             const pctDiv = document.createElement("div");
             pctDiv.className = "question-correct-pct";
             pctDiv.textContent = hardMode
@@ -1412,7 +1417,6 @@
   </script>
 </body>
 </html>
-
 
 
 
