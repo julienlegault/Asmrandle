@@ -8,6 +8,10 @@ from urllib.parse import urlparse
 OUTPUT_FILE = "formatted_card_list.js"
 EDHREC_BASE_URL = "https://json.edhrec.com/pages/cards/"
 SCRYFALL_BULK_DATA_URL = "https://api.scryfall.com/bulk-data"
+SCRYFALL_HEADERS = {
+    "User-Agent": "AsmrandleCardUpdater/1.0",
+    "Accept": "application/json;q=0.9,*/*;q=0.8",
+}
 
 # Delay between API checks to avoid hammering EDHREC
 REQUEST_DELAY = 0.2  # seconds
@@ -20,7 +24,7 @@ def download_oracle_cards():
     
     try:
         # Get bulk data info from Scryfall
-        response = requests.get(SCRYFALL_BULK_DATA_URL, timeout=10)
+        response = requests.get(SCRYFALL_BULK_DATA_URL, headers=SCRYFALL_HEADERS, timeout=10)
         response.raise_for_status()
         bulk_data = response.json()
         
@@ -42,7 +46,7 @@ def download_oracle_cards():
         print(f"   Size: {file_size:,} bytes ({file_size / 1024 / 1024:.1f} MB)")
         
         # Download the file
-        response = requests.get(download_url, timeout=60, stream=True)
+        response = requests.get(download_url, headers=SCRYFALL_HEADERS, timeout=60, stream=True)
         response.raise_for_status()
         
         # Save to temporary file
