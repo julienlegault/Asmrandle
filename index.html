@@ -662,6 +662,7 @@
     let shuffled = [];
     let hardMode = false;
     let resultArray = [];
+    let communityDataPromise = null;
 
     // Configuration for development vs production
     const isLocalHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '';
@@ -952,14 +953,10 @@
       return Promise.all(promises);
     }
 
-    async function showCommunityResults(replay=false) {
-      const communityResults = document.getElementById("community-results");
-      communityResults.innerHTML = "";
-      
+    async function fetchCommunityData() {
       try {
-        
         // Add timeout for mobile reliability
-        const timeoutPromise = new Promise((_, reject) => 
+        const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Timeout after 10 seconds')), 10000)
         );
         // Fetch all counts concurrently with timeout
@@ -971,7 +968,7 @@
         for (let i = 0; i <= 10; i++) {
           hardModePromises.push(getCount(i, true));
         }
-        
+
         const counts = await Promise.race([
           Promise.all(countPromises),
           timeoutPromise
@@ -989,7 +986,26 @@
         }
         const questionTimeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 8000));
         const questionCounts = await Promise.race([Promise.all(questionCountPromises), questionTimeoutPromise]);
-        
+
+        return { counts, hardModeCounts, questionCounts };
+      } catch (error) {
+        return null;
+      }
+    }
+
+    async function showCommunityResults(replay=false) {
+      const communityResults = document.getElementById("community-results");
+      communityResults.innerHTML = "";
+      
+      try {
+        const data = await communityDataPromise;
+        if (!data) return;
+
+        // Copy arrays so the shared promise data is never mutated across calls
+        const counts = [...data.counts];
+        const hardModeCounts = [...data.hardModeCounts];
+        const questionCounts = data.questionCounts;
+
         // Calculate total players (normal + hard mode)
         let totalPlayers = 0;
         for (let i = 0; i <= 10; i++) {
@@ -1147,6 +1163,7 @@
         // Append content to community results
         communityResults.appendChild(content);
 
+        const normalModePlayers = counts.reduce((sum, count) => sum + count, 0);
         const hardModePlayers = hardModeCounts.reduce((sum, count) => sum + count, 0);
 
         // Display per-question correct percentages under each pair of cards
@@ -1159,7 +1176,7 @@
             if (!replay && resultArray[i]) {
               qCount++;
             }
-            const playersForMode = hardMode ? hardModePlayers : totalPlayers;
+            const playersForMode = hardMode ? hardModePlayers : normalModePlayers;
             const pct = playersForMode > 0
               ? Math.min(100, ((qCount / playersForMode) * 100).toFixed(1))
               : 0;
@@ -1259,9 +1276,10 @@
           shuffled = juneFirstShuffledList;
         }
         if (todayCookie !== null) {
+          hardMode = todayCookie.split("|").includes("HM");
+          communityDataPromise = fetchCommunityData(); // Start background fetch early
           await fetchAllCardData();
           resultArray = todayCookie.split("|")[0].split(",").map(item => item === 'true');
-          hardMode = todayCookie.split("|").includes("HM");
           if (resultArray.length !== 10) {
             resultArray = Array(10).fill(false);
           }
@@ -1278,6 +1296,7 @@
           return;
         }
         gameType = 1;
+        communityDataPromise = fetchCommunityData(); // Start background fetch while player plays
       } else {
         shuffled = [...window.cardList].sort(() => 0.5 - Math.random()); // shuffle full list
       }
