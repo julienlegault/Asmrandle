@@ -1004,7 +1004,7 @@
         // Copy arrays so the shared promise data is never mutated across calls
         const counts = [...data.counts];
         const hardModeCounts = [...data.hardModeCounts];
-        const questionCounts = data.questionCounts;
+        const questionCounts = data.questionCounts ? [...data.questionCounts] : null;
 
         // Calculate total players (normal + hard mode)
         let totalPlayers = 0;
@@ -1276,10 +1276,11 @@
           shuffled = juneFirstShuffledList;
         }
         if (todayCookie !== null) {
-          hardMode = todayCookie.split("|").includes("HM");
+          const cookieParts = todayCookie.split("|");
+          hardMode = cookieParts.includes("HM");
           communityDataPromise = fetchCommunityData(); // Start background fetch early
           await fetchAllCardData();
-          resultArray = todayCookie.split("|")[0].split(",").map(item => item === 'true');
+          resultArray = cookieParts[0].split(",").map(item => item === 'true');
           if (resultArray.length !== 10) {
             resultArray = Array(10).fill(false);
           }
