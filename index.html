@@ -913,7 +913,7 @@
           const data = await cardRes.json();
           const card = data?.container?.json_dict?.card;
           if (!card) return fetchCardData(20 +idx);
-          const inclusion = parseFloat(card.inclusion);
+          const inclusion = parseFloat(card.num_decks);
           const potential = parseFloat(card.potential_decks);
           let flavorText = "No flavor text available";
           let imageUrl = card.image_uris?.[0]?.normal || null;
