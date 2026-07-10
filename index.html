@@ -906,7 +906,6 @@
     }
 
     const MAX_CARD_ATTEMPTS = 150;
-    const MAX_EDHREC_RANK = 50000;
 
     async function fetchCardData(idx, attempts = 0) {
       if (attempts >= MAX_CARD_ATTEMPTS) {
@@ -940,23 +939,8 @@
             }
           }
         } else {
-          // EDHREC card object unavailable — fall back to Scryfall for card data
-          const scryName = name.replace(/-/g, ' ');
-          try {
-            const sfRes = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(scryName)}`);
-            if (!sfRes.ok) return fetchCardData(20 + idx, attempts + 1);
-            const sfCard = await sfRes.json();
-            if (!sfCard.edhrec_rank) return fetchCardData(20 + idx, attempts + 1);
-            // Map rank to a 0–100 popularity score using a logarithmic scale
-            const LOG_MAX = Math.log(MAX_EDHREC_RANK);
-            inclusion = Math.max(0, LOG_MAX - Math.log(sfCard.edhrec_rank));
-            potential = LOG_MAX;
-            imageUrl = sfCard.image_uris?.normal || sfCard.card_faces?.[0]?.image_uris?.normal || null;
-            flavorText = sfCard.flavor_text || sfCard.card_faces?.[0]?.flavor_text || "No flavor text available";
-            artImg = sfCard.image_uris?.art_crop || sfCard.card_faces?.[0]?.image_uris?.art_crop || imageUrl;
-          } catch (err) {
-            return fetchCardData(20 + idx, attempts + 1);
-          }
+          // EDHREC inclusion data unavailable — skip this card
+          return fetchCardData(20 + idx, attempts + 1);
         }
 
         if (!isFinite(inclusion) || !isFinite(potential) || potential === 0) return fetchCardData(20 + idx, attempts + 1);
