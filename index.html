@@ -905,43 +905,58 @@
       }
     }
 
-    async function fetchCardData(idx) {
+    const MAX_CARD_ATTEMPTS = 150;
+
+    async function fetchCardData(idx, attempts = 0) {
+      if (attempts >= MAX_CARD_ATTEMPTS) {
+        return null;
+      }
       const name = shuffled[idx++];
-        try {
-          const cardRes = await fetch(`https://json.edhrec.com/pages/cards/${name}.json`);
-          if (!cardRes.ok) return fetchCardData(20 +idx);
-          const data = await cardRes.json();
-          const card = data?.container?.json_dict?.card;
-          if (!card) return fetchCardData(20 +idx);
-          const inclusion = parseFloat(card.inclusion);
-          const potential = parseFloat(card.potential_decks);
-          let flavorText = "No flavor text available";
-          let imageUrl = card.image_uris?.[0]?.normal || null;
-          let artImg = null;
+      try {
+        const cardRes = await fetch(`https://json.edhrec.com/pages/cards/${name}.json`);
+        if (!cardRes.ok) return fetchCardData(20 + idx, attempts + 1);
+        const data = await cardRes.json();
+        const card = data?.container?.json_dict?.card;
+
+        let inclusion, potential, imageUrl;
+        let artImg = null;
+        let flavorText = "No flavor text available";
+
+        if (card && isFinite(parseFloat(card.inclusion)) && isFinite(parseFloat(card.potential_decks)) && parseFloat(card.potential_decks) > 0) {
+          // Original EDHREC structure: card object with inclusion data present
+          inclusion = parseFloat(card.inclusion);
+          potential = parseFloat(card.potential_decks);
+          imageUrl = card.image_uris?.[0]?.normal || null;
           if (hardMode) {
             try {
               const scryfallRes = await fetch(`https://api.scryfall.com/cards/${card.id}`);
-              if (!scryfallRes.ok) return fetchCardData(20 +idx);
+              if (!scryfallRes.ok) return fetchCardData(20 + idx, attempts + 1);
               const scryfallData = await scryfallRes.json();
               flavorText = scryfallData?.flavor_text || "No flavor text available";
               artImg = scryfallData?.image_uris?.art_crop || scryfallData?.card_faces?.[0]?.image_uris?.art_crop || imageUrl;
             } catch (err) {
-              return fetchCardData(20 +idx);
+              return fetchCardData(20 + idx, attempts + 1);
             }
           }
-          if (!isFinite(inclusion) || !isFinite(potential) || potential === 0) return fetchCardData(20 +idx);
-          const popularity = (inclusion / potential) * 100;
-          return ({
-            name,
-            popularity,
-            img: imageUrl,
-            artImg,
-            flavorText
-          });
-        } catch (err) {
-          // on network / parse error, skip this card and continue
-          return fetchCardData(20 +idx);
+        } else {
+          // EDHREC inclusion data unavailable — skip this card
+          return fetchCardData(20 + idx, attempts + 1);
         }
+
+        if (!isFinite(inclusion) || !isFinite(potential) || potential === 0) return fetchCardData(20 + idx, attempts + 1);
+        const popularity = (inclusion / potential) * 100;
+        return { name, popularity, img: imageUrl, artImg, flavorText };
+      } catch (err) {
+        // on network / parse error, skip this card and continue
+        return fetchCardData(20 + idx, attempts + 1);
+      }
+    }
+
+    function showCardLoadError() {
+      gameArea.style.display = "none";
+      resultText.textContent = `Unable to find valid card data after checking ${MAX_CARD_ATTEMPTS} cards. Please try again later.`;
+      copyResultsBtn.style.display = "none";
+      result.style.display = "block";
     }
 
     function fetchAllCardData() {
@@ -1226,6 +1241,7 @@
         
         const card = cardData[i * 2];
         const card2 = cardData[i * 2 + 1];
+        if (!card || !card2) continue;
         
         // Create first card container
         const card1Container = document.createElement("div");
@@ -1321,6 +1337,10 @@
       await fetchCardData(1).then(data2 => {
         cardData[1] = data2;
       });
+      if (!cardData[0] || !cardData[1]) {
+        showCardLoadError();
+        return;
+      }
       for (let i = 0; i < 10; i++) {
         const dot = document.createElement("div");
         dot.className = "dot";
@@ -1432,6 +1452,10 @@
       const waitTime = Math.max(CARD_DISPLAY_TIME - elapsed, 0);
       setTimeout(() => {
         overlays.forEach(o => o.remove());
+        if (!cardData[idx1] || !cardData[idx2]) {
+          showCardLoadError();
+          return;
+        }
         showNextPair();
       }, waitTime);
     }

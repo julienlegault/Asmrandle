@@ -90,7 +90,11 @@ def is_valid_edhrec_card(name: str) -> bool:
         if response.status_code != 200:
             return False
         data = response.json()
-        # minimal validation: ensure expected keys exist
+        # Accept the new cardlists structure
+        cardlists = data.get("container", {}).get("json_dict", {}).get("cardlists", [])
+        if cardlists:
+            return True
+        # Also accept the legacy card-inclusion structure for backwards compatibility
         card_info = data.get("container", {}).get("json_dict", {}).get("card", {})
         return "inclusion" in card_info and "potential_decks" in card_info
     except Exception:
