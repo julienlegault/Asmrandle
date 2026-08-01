@@ -38,7 +38,7 @@ def download_oracle_cards():
         if not oracle_data:
             raise Exception("Oracle cards dataset not found in Scryfall bulk data")
         
-        download_url = oracle_data["download_uri"]
+        download_url = oracle_data["jsonl_download_uri"]
         file_size = oracle_data.get("size", 0)
         
         print(f"📥 Downloading oracle cards from Scryfall...")
