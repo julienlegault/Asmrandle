@@ -1,3 +1,4 @@
+import gzip
 import json
 import re
 import requests
@@ -45,21 +46,25 @@ def download_oracle_cards():
         print(f"   URL: {download_url}")
         print(f"   Size: {file_size:,} bytes ({file_size / 1024 / 1024:.1f} MB)")
         
-        # Download the file
+        # Download the gzipped JSONL file
         response = requests.get(download_url, headers=SCRYFALL_HEADERS, timeout=60, stream=True)
         response.raise_for_status()
         
         # Save to temporary file
-        temp_file = "oracle-cards-temp.json"
+        temp_file = "oracle-cards-temp.jsonl.gz"
         with open(temp_file, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         
         print("✅ Download complete!")
         
-        # Load and return the JSON data
-        with open(temp_file, "r", encoding="utf-8") as f:
-            cards = json.load(f)
+        # Decompress and parse JSONL (one JSON object per line)
+        cards = []
+        with gzip.open(temp_file, "rt", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    cards.append(json.loads(line))
         
         # Clean up temp file
         os.remove(temp_file)
