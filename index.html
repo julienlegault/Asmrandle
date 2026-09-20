@@ -664,6 +664,7 @@
     let hardMode = false;
     let resultArray = [];
     let communityDataPromise = null;
+    let firstTenCheckPromise = null;
 
     // Configuration for development vs production
     const isLocalHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '';
@@ -748,6 +749,12 @@
       return resultArray.map(isCorrect => isCorrect ? "🟩" : "🟥").join("");
     }
 
+    const REQUEST_STAGGER_MS = 150;
+
+    function staggered(delayMs, fn) {
+      return new Promise(resolve => setTimeout(() => resolve(fn()), delayMs));
+    }
+
     async function getCount(score, hm = false, retries = 2) {
       try {
         // Ensure counter is initialized (critical for Android Chrome)
@@ -762,13 +769,17 @@
         }
         return data.data.up_count;
       } catch (error) {
-        
+        // A counter that has never been upped doesn't exist: 404 is a real zero
+        if (error && error.status === 404) {
+          return 0;
+        }
         // Retry on mobile networks (common issue with Android Chrome)
         if (retries > 0) {
           await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
           return getCount(score, hm, retries - 1);
         }
-        return 0;
+        // null = "unknown", so a failed request is never mistaken for a real zero
+        return null;
       }
     }
 
@@ -781,6 +792,9 @@
         const data = await counter.get(key);
         return data.data.up_count;
       } catch (error) {
+        if (error && error.status === 404) {
+          return 0;
+        }
         if (retries > 0) {
           await new Promise(resolve => setTimeout(resolve, 1000));
           return getQuestionCount(questionNum, retries - 1);
@@ -960,14 +974,16 @@
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Timeout after 10 seconds')), 10000)
         );
-        // Fetch all counts concurrently with timeout
+        // Fetch all counts with staggered starts so the burst of 22 requests
+        // doesn't trip the CounterAPI rate limit (which made the later
+        // requests, daily10/dailyhm10, fail preferentially)
         const countPromises = [];
         for (let i = 0; i <= 10; i++) {
-          countPromises.push(getCount(i));
+          countPromises.push(staggered(i * REQUEST_STAGGER_MS, () => getCount(i)));
         }
         const hardModePromises = [];
         for (let i = 0; i <= 10; i++) {
-          hardModePromises.push(getCount(i, true));
+          hardModePromises.push(staggered((11 + i) * REQUEST_STAGGER_MS, () => getCount(i, true)));
         }
 
         const counts = await Promise.race([
@@ -983,7 +999,7 @@
         // Fetch per-question correct counts
         const questionCountPromises = [];
         for (let i = 1; i <= 10; i++) {
-          questionCountPromises.push(getQuestionCount(i));
+          questionCountPromises.push(staggered((i - 1) * REQUEST_STAGGER_MS, () => getQuestionCount(i)));
         }
         const questionTimeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 8000));
         const questionCounts = await Promise.race([Promise.all(questionCountPromises), questionTimeoutPromise]);
@@ -1007,16 +1023,21 @@
         const hardModeCounts = [...data.hardModeCounts];
         const questionCounts = data.questionCounts ? [...data.questionCounts] : null;
 
-        // Calculate total players (normal + hard mode)
+        // Calculate total players (normal + hard mode); failed fetches are null
         let totalPlayers = 0;
         for (let i = 0; i <= 10; i++) {
-          totalPlayers += counts[i] + hardModeCounts[i];
+          totalPlayers += (counts[i] || 0) + (hardModeCounts[i] || 0);
         }
         let isFirst10 = false;
-        if(counts[10]==0 && hardModeCounts[10]==0 && correctCount==10){
-           resultText.textContent = `${dateStr} | ✨ Today's first 10 ✨`;
-           resultToCopy = `✨✨✨✨✨✨✨✨✨✨ | Today's First 10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
-           isFirst10 = true;
+        if (!replay && correctCount === 10 && firstTenCheckPromise) {
+          // Use counts re-fetched at result time, not the snapshot from game
+          // start. Strict === 0 so a failed fetch (null) never counts as first.
+          const [dailyTens, hardTens] = await firstTenCheckPromise;
+          if (dailyTens === 0 && hardTens === 0) {
+            resultText.textContent = `${dateStr} | ✨ Today's first 10 ✨`;
+            resultToCopy = `✨✨✨✨✨✨✨✨✨✨ | Today's First 10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
+            isFirst10 = true;
+          }
         }
         if (totalPlayers !== 0) {
           communityResults.style.display = "block"; // Show if data exists
@@ -1025,9 +1046,9 @@
         if(!replay){
            totalPlayers++;
            if (hardMode) {
-             hardModeCounts[correctCount]++;
+             hardModeCounts[correctCount] = (hardModeCounts[correctCount] || 0) + 1;
            } else {
-             counts[correctCount]++;
+             counts[correctCount] = (counts[correctCount] || 0) + 1;
            }
         }
 
@@ -1053,7 +1074,7 @@
         content.id = "community-content";
         
         // Find max count for scaling bars (total of normal + hard mode)
-        const totalCounts = counts.map((count, i) => count + hardModeCounts[i]);
+        const totalCounts = counts.map((count, i) => (count || 0) + (hardModeCounts[i] || 0));
         const maxCount = Math.max(...totalCounts, 1); // Ensure at least 1 to avoid division by zero
         
         // Create bar graph container
@@ -1063,8 +1084,8 @@
         // Create bars for scores 0-10
         for (let i = 0; i < 11; i++) {
           const score = i;
-          const normalCount = counts[i];
-          const hardCount = hardModeCounts[i];
+          const normalCount = counts[i] || 0;
+          const hardCount = hardModeCounts[i] || 0;
           const totalCount = normalCount + hardCount;
           const percentage = maxCount > 0 ? (totalCount / maxCount) * 100 : 0;
           
@@ -1156,7 +1177,7 @@
         totalDiv.className = "total-players";
         let betterThan = 0;
         for (let i = 0; i < correctCount; i++) {
-          betterThan += counts[i] + hardModeCounts[i];
+          betterThan += (counts[i] || 0) + (hardModeCounts[i] || 0);
         }
         totalDiv.textContent = `Total players today: ${totalPlayers} | You scored better than ${(betterThan / totalPlayers * 100).toFixed(2)}% of players`;
         content.appendChild(totalDiv);
@@ -1164,8 +1185,8 @@
         // Append content to community results
         communityResults.appendChild(content);
 
-        const normalModePlayers = counts.reduce((sum, count) => sum + count, 0);
-        const hardModePlayers = hardModeCounts.reduce((sum, count) => sum + count, 0);
+        const normalModePlayers = counts.reduce((sum, count) => sum + (count || 0), 0);
+        const hardModePlayers = hardModeCounts.reduce((sum, count) => sum + (count || 0), 0);
 
         // Display per-question correct percentages under each pair of cards
         if (questionCounts && totalPlayers > 0) {
@@ -1331,6 +1352,11 @@
 
     function saveResults() {
         if (gameType === 1) {
+          if (correctCount === 10) {
+            // Fresh read of the score-10 counters, fired before increaseCount
+            // so it can't include our own play
+            firstTenCheckPromise = Promise.all([getCount(10), getCount(10, true)]);
+          }
           increaseCount(correctCount);
           copyResultsBtn.style.display = "inline-block";
           setCookie(`${dateStrSanatized}`, `${resultArray}|${correctCount}${hardMode?'|HM':''}`, 30); // Set cookie for 30 days
