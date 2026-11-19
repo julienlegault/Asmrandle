@@ -1,28 +1,43 @@
-version: '3.8'
-
 services:
-  asmrandle:
-    image: mcr.microsoft.com/devcontainers/python:3.11-bullseye
-    container_name: asmrandle-dev
-    working_dir: /workspace
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
     volumes:
-      - .:/workspace
-    ports:
-      - "8000:8000"
-    environment:
-      - PYTHONUNBUFFERED=1
-    command: >
-      bash -c "
-        echo 'Installing dependencies...' &&
-        pip install --upgrade pip &&
-        npm install --save-dev @playwright/test &&
-        npx playwright install &&
-        echo 'Starting HTTP server on port 8000...' &&
-        python -m http.server 8000
-      "
-    networks:
-      - asmrandle-network
+      - ..:/workspaces/Asmrandle:cached
+    working_dir: /workspaces/Asmrandle
+    command: sleep infinity
+    depends_on:
+      db:
+        condition: service_healthy
 
-networks:
-  asmrandle-network:
-    driver: bridge
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: asmrandle
+      MYSQL_USER: asmrandle
+      MYSQL_PASSWORD: asmrandle
+      MYSQL_ROOT_PASSWORD: local-dev-only
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspaces/Asmrandle:cached
+    working_dir: /workspaces/Asmrandle/backend
+    command: sh -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 2; done; exec php artisan schedule:work'
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mysql-data:

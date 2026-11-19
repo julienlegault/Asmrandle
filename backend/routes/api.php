@@ -1,0 +1,98 @@
+<?php
+
+use App\Services\GameService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware('throttle:120,1')->group(function () {
+    Route::get('/config', fn () => ['fastModeAvailable' => app()->environment('local')]);
+
+    Route::post('/games', function (Request $request, GameService $games) {
+        $data = $request->validate(['mode' => 'required|in:daily,practice']);
+        $date = $games->gameDate();
+        if ($data['mode'] === 'daily') {
+            $games->daily($date);
+
+            return ['id' => $date, 'date' => $date];
+        }
+
+        return ['id' => $games->practice(), 'date' => $date];
+    });
+
+    Route::get('/games/{id}/rounds/{round}', function (string $id, int $round, GameService $games) {
+        abort_unless($round >= 0 && $round < 10, 404);
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $id)) {
+            abort_unless($id === $games->gameDate(), 404);
+            $cards = $games->daily($id);
+        } else {
+            $game = DB::table('practice_games')->where('id', $id)->first();
+            abort_unless($game, 404);
+            $cards = json_decode($game->cards, true, flags: JSON_THROW_ON_ERROR);
+        }
+
+        return ['cards' => array_slice($cards, $round * 2, 2)];
+    });
+
+    Route::get('/community', function (GameService $games) {
+        $results = DB::table('game_results')->where('date', $games->gameDate())->get();
+        $counts = array_fill(0, 11, 0);
+        $hardCounts = array_fill(0, 11, 0);
+        $questions = [array_fill(0, 10, 0), array_fill(0, 10, 0)];
+        foreach ($results as $result) {
+            if ($result->hard_mode) {
+                $hardCounts[$result->score]++;
+            } else {
+                $counts[$result->score]++;
+            }
+            foreach (json_decode($result->answers, true, flags: JSON_THROW_ON_ERROR) as $index => $correct) {
+                $questions[(int) $result->hard_mode][$index] += (int) $correct;
+            }
+        }
+
+        return ['counts' => $counts, 'hardModeCounts' => $hardCounts, 'questions' => $questions];
+    });
+
+    Route::post('/results', function (Request $request, GameService $games) {
+        $data = $request->validate([
+            'mode' => 'required|in:daily,practice',
+            'date' => 'required|date_format:Y-m-d',
+            'hardMode' => 'required|boolean',
+            'answers' => 'required|array|size:10',
+            'answers.*' => 'required|boolean',
+            'submissionId' => 'required|uuid',
+        ]);
+        if ($data['mode'] === 'practice') {
+            DB::table('practice_plays')->insert(['created_at' => now()]);
+
+            return ['firstTen' => false];
+        }
+        abort_unless($data['date'] === $games->gameDate(), 409, 'The daily challenge has changed.');
+
+        return DB::transaction(function () use ($data) {
+            $challenge = DB::table('daily_challenges')->where('date', $data['date'])->lockForUpdate()->first();
+            abort_unless($challenge, 409, 'The daily challenge has not been started.');
+            $existing = DB::table('game_results')->where('submission_id', $data['submissionId'])->first();
+            if ($existing) {
+                abort_unless($existing->date === $data['date'], 409);
+
+                return ['firstTen' => (bool) $existing->first_ten];
+            }
+            $score = count(array_filter($data['answers']));
+            $firstTen = $score === 10 && ! DB::table('game_results')
+                ->where('date', $data['date'])->where('score', 10)->exists();
+            DB::table('game_results')->insert([
+                'submission_id' => $data['submissionId'],
+                'date' => $data['date'],
+                'hard_mode' => $data['hardMode'],
+                'score' => $score,
+                'first_ten' => $firstTen,
+                'answers' => json_encode($data['answers'], JSON_THROW_ON_ERROR),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            return ['firstTen' => $firstTen];
+        });
+    });
+});

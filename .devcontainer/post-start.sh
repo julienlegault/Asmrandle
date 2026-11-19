@@ -1,31 +1,20 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
 
-echo "🎮 Starting Asmrandle development server..."
+php backend/artisan migrate --force
+php backend/artisan cards:initialize-development
 
-# Check if server is already running
-if pgrep -f "python -m http.server 8000" > /dev/null; then
-  echo "✅ Web server already running"
-else
-  # Start Python HTTP server in background, fully detached
-  cd /workspaces/Asmrandle
-  nohup python -m http.server 8000 > /tmp/http-server.log 2>&1 &
-  SERVER_PID=$!
-  
-  # Wait a moment for the server to start
-  sleep 1
-  
-  # Verify the server is running
-  if pgrep -f "python -m http.server 8000" > /dev/null; then
-    echo "✅ Web server started (PID: $SERVER_PID)"
-  else
-    echo "❌ Failed to start web server. Check /tmp/http-server.log"
-    cat /tmp/http-server.log
-    exit 1
-  fi
+if ! curl --silent --fail http://127.0.0.1:8000/api/config >/dev/null; then
+  nohup php backend/artisan serve --host=0.0.0.0 --port=8000 > /tmp/asmrandle-web.log 2>&1 &
+  for _ in {1..30}; do
+    if curl --silent --fail http://127.0.0.1:8000/api/config >/dev/null; then
+      echo "Asmrandle is available on port 8000."
+      exit 0
+    fi
+    sleep 1
+  done
+  echo "Asmrandle failed to start. See /tmp/asmrandle-web.log." >&2
+  exit 1
 fi
-
-echo "📍 Server available at: http://localhost:8000"
-echo ""
-echo "🧪 Ready for E2E testing with:"
-echo "   npm test"
-echo ""
+echo "Asmrandle is already available on port 8000."

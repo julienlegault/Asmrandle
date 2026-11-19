@@ -1,217 +1,59 @@
-name: Build and Deploy
+name: Test
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:  # Allow manual triggering
-    inputs:
-      skip_pull_cards:
-        description: 'Skip the pull cards step'
-        required: false
-        type: boolean
-        default: false
-  schedule:
-    # Run on the 1st day of every month at 6:00 AM UTC (midnight CST) with 20 minutes to run the program
-    - cron: '39 5 1 * *'
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 
-# Default to read-only; each job declares only what it needs
 permissions:
   contents: read
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
-  # Update card list job (only for scheduled runs or manual triggers)
-  update-cards:
-    if: (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.event.inputs.skip_pull_cards != 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write  # Required to commit and push card list updates
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Fetch full history for proper date checking
-        token: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests
-    
-    - name: Check if script needs to run
-      id: check_run
-      run: |
-        # Check if formatted_card_list.js exists and get its last modified time
-        if [ -f "formatted_card_list.js" ]; then
-          # Get the last commit date that modified formatted_card_list.js
-          LAST_MODIFIED=$(git log -1 --format="%ct" -- formatted_card_list.js 2>/dev/null || echo "0")
-          CURRENT_TIME=$(date +%s)
-          TIME_DIFF=$((CURRENT_TIME - LAST_MODIFIED))
-          DAYS_DIFF=$((TIME_DIFF / 86400))
-          
-          echo "Last modified: $LAST_MODIFIED ($(date -d @$LAST_MODIFIED))"
-          echo "Current time: $CURRENT_TIME ($(date -d @$CURRENT_TIME))"
-          echo "Days since last update: $DAYS_DIFF"
-          # For scheduled runs, use 2-day threshold
-          if [ $DAYS_DIFF -lt 2 ]; then
-            echo "should_run=false" >> $GITHUB_OUTPUT
-            echo "File was updated $DAYS_DIFF days ago (less than 2 days)"
-          else
-            echo "should_run=true" >> $GITHUB_OUTPUT
-            echo "File was updated $DAYS_DIFF days ago (more than 2 days) - will update"
-          fi
-        else
-          echo "should_run=true" >> $GITHUB_OUTPUT
-          echo "formatted_card_list.js doesn't exist - will create"
-        fi
-    
-    - name: Run card update script
-      if: steps.check_run.outputs.should_run == 'true'
-      run: |
-        echo "Running pullCards.py to update card list..."
-        python pullCards.py
-    
-    - name: Check for changes
-      if: steps.check_run.outputs.should_run == 'true'
-      id: check_changes
-      run: |
-        if git diff --quiet formatted_card_list.js 2>/dev/null; then
-          echo "has_changes=false" >> $GITHUB_OUTPUT
-          echo "No changes detected in formatted_card_list.js"
-        else
-          echo "has_changes=true" >> $GITHUB_OUTPUT
-          echo "Changes detected in formatted_card_list.js"
-        fi
-    
-    - name: Commit and push changes
-      if: steps.check_run.outputs.should_run == 'true' && steps.check_changes.outputs.has_changes == 'true'
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add formatted_card_list.js
-        git commit -m "🗓️ Monthly auto-update card list with latest cards from Scryfall
-        
-        - Scheduled monthly update using pullCards.py
-        - Added new cards from latest Scryfall oracle data
-        - Automated monthly maintenance via GitHub Actions"
-        git push
-
-  # Build and test job
   test:
     runs-on: ubuntu-latest
-    needs: [update-cards]
-    if: always() && (needs.update-cards.result == 'success' || needs.update-cards.result == 'skipped')
-    permissions:
-      contents: read
+    env:
+      APP_ENV: local
+      APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /tmp/asmrandle-ci.sqlite
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      ASMRANDLE_BASE_URL: http://localhost:3000
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
         with:
-          # If update-cards ran and made changes, we need to fetch the latest
-          ref: ${{ github.ref }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, xml
+          coverage: none
+      - uses: actions/setup-node@v4
         with:
-          node-version: '18'
-
-      - name: Install dependencies
+          node-version: '20'
+          cache: npm
+      - run: composer install --working-dir=backend --no-interaction --prefer-dist
+      - run: php backend/vendor/bin/phpunit --configuration backend/phpunit.xml
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start test application
         run: |
-          npm init -y
-          npm install --save-dev @playwright/test
-          npx playwright install --with-deps chromium
-
-      - name: Start local server for testing
-        run: |
-          # Start a simple HTTP server in the background
-          python3 -m http.server 3000 &
-          SERVER_PID=$!
-          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
-          # Wait for server to start
-          sleep 5
-          # Verify server is running
-          curl -f http://localhost:3000 || exit 1
-
-      - name: Verify tests directory exists
-        run: |
-          if [ ! -d "tests" ]; then
-            echo "❌ Tests directory not found"
-            echo "Please ensure the tests/ directory exists with test files"
-            exit 1
-          fi
-          
-          if [ ! -f "tests/e2e.spec.js" ]; then
-            echo "❌ No test files found in tests/ directory"  
-            echo "Please ensure test files exist (e.g., tests/e2e.spec.js)"
-            exit 1
-          fi
-          
-          echo "✅ Tests directory found with test files"
-          ls -la tests/
-
-      - name: Run Playwright tests
-        run: npx playwright test
-
-      - name: Upload test results
+          touch "$DB_DATABASE"
+          php backend/artisan migrate --force
+          php backend/artisan db:seed --class=BrowserTestSeeder --force
+          php backend/artisan serve --host=127.0.0.1 --port=3000 > /tmp/asmrandle-ci.log 2>&1 &
+          echo "SERVER_PID=$!" >> "$GITHUB_ENV"
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:3000/api/config; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/asmrandle-ci.log
+          exit 1
+      - run: npx playwright test --workers=1
+      - if: always()
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: playwright-report
-          path: |
-            test-results/
-            playwright-report/
-          retention-days: 30
-
-      - name: Stop local server
-        if: always()
-        run: |
-          if [ ! -z "$SERVER_PID" ]; then
-            kill $SERVER_PID || true
-          fi
-
-  # Deployment job (only runs if tests pass)
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: [update-cards, test]
-    if: >
-      always() &&
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') &&
-      (needs.update-cards.result == 'success' || needs.update-cards.result == 'skipped') &&
-      needs.test.result == 'success'
-    permissions:
-      pages: write      # Required to deploy to GitHub Pages
-      id-token: write   # Required for OIDC token to deploy
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Get the latest code including any card updates
-          ref: ${{ github.ref }}
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          # Upload entire repository
-          path: '.'
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          name: playwright-results
+          path: test-results/
+          if-no-files-found: ignore
+      - if: always()
+        run: if [ -n "${SERVER_PID:-}" ]; then kill "$SERVER_PID" || true; fi

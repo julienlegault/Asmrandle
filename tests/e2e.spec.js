@@ -1,49 +1,59 @@
 const { test, expect } = require('@playwright/test');
-
-// Mock response returned for all counterapi requests
-const COUNTER_API_MOCK = { data: { up_count: 5, down_count: 0 } };
-const COUNTER_CDN_SCRIPT = `
-(() => {
-  const counts = new Map();
-  class Counter {
-    constructor() {}
-    async get(name) {
-      return { data: { up_count: counts.has(name) ? counts.get(name) : 5, down_count: 0 } };
-    }
-    async up(name) {
-      const next = (counts.has(name) ? counts.get(name) : 5) + 1;
-      counts.set(name, next);
-      return { data: { up_count: next, down_count: 0 } };
-    }
-  }
-  window.Counter = Counter;
-})();
-`;
+const BASE_URL = process.env.ASMRANDLE_BASE_URL || 'http://localhost:8000';
 
 test.describe('Asmrandle E2E Tests', () => {
 
     test.beforeEach(async ({ page }) => {
-        // Intercept CounterAPI client script for deterministic offline-safe behavior.
-        await page.route('**/counter.browser.min.js', route =>
+        await page.addInitScript(() => {
+            document.addEventListener('DOMContentLoaded', () => {
+                document.querySelector('#fast-mode').checked = true;
+            });
+        });
+        // Avoid depending on the image CDN in browser tests.
+        await page.route('**/cards.scryfall.io/**', route =>
             route.fulfill({
                 status: 200,
-                contentType: 'application/javascript',
-                body: COUNTER_CDN_SCRIPT,
+                contentType: 'image/svg+xml',
+                body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="140"/>',
             })
         );
-
-        // Intercept all CounterAPI requests so tests are isolated from the live API.
-        // counter.get() calls GET https://api.counterapi.dev/v2/{workspace}/{name}
-        // counter.up()  calls GET https://api.counterapi.dev/v2/{workspace}/{name}/up
-        // Both expect a JSON body of the form { data: { up_count: N } }.
-        await page.route('**/api.counterapi.dev/**', route =>
+        await page.route('**/api/community', route =>
             route.fulfill({
                 status: 200,
                 contentType: 'application/json',
-                body: JSON.stringify(COUNTER_API_MOCK),
+                body: JSON.stringify({
+                    counts: Array(11).fill(5),
+                    hardModeCounts: Array(11).fill(5),
+                    questions: [Array(10).fill(5), Array(10).fill(5)],
+                }),
             })
         );
 
+    });
+
+    test('Fast Mode is optional and changes the card delay', async ({ page }) => {
+        await page.goto(BASE_URL);
+        await expect(page.locator('#fast-mode-setting')).toBeVisible();
+        await page.uncheck('#fast-mode');
+        await page.click('#play-random');
+        await page.waitForSelector('.card img');
+
+        let started = Date.now();
+        await page.click('.card:first-child');
+        await page.waitForSelector('.overlay', { state: 'hidden' });
+        expect(Date.now() - started).toBeGreaterThanOrEqual(2600);
+
+        await page.reload();
+        await expect(page.locator('#fast-mode-setting')).toBeVisible();
+        await page.check('#fast-mode');
+        await page.click('#play-random');
+        await page.waitForSelector('.card img');
+        started = Date.now();
+        await page.click('.card:first-child');
+        await page.waitForSelector('.overlay', { state: 'hidden' });
+        const fastElapsed = Date.now() - started;
+        expect(fastElapsed).toBeGreaterThanOrEqual(150);
+        expect(fastElapsed).toBeLessThan(1500);
     });
 
     test.afterEach(async ({ page }, testInfo) => {
@@ -58,7 +68,7 @@ test.describe('Asmrandle E2E Tests', () => {
     });
 
     test('Homepage loads correctly', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto(BASE_URL);
         
         // Check that main menu buttons are present
         await expect(page.locator('#start-daily')).toBeVisible();
@@ -71,7 +81,7 @@ test.describe('Asmrandle E2E Tests', () => {
     });
 
     test('Daily game button functionality', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto(BASE_URL);
         
         // Click daily game button
         await page.click('#start-daily');
@@ -88,7 +98,7 @@ test.describe('Asmrandle E2E Tests', () => {
     });
 
     test('Practice game button functionality', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto(BASE_URL);
         
         // Click practice button
         await page.click('#play-random');
@@ -105,7 +115,7 @@ test.describe('Asmrandle E2E Tests', () => {
     });
 
     test('Game cards load and are clickable', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto(BASE_URL);
         
         // Start a practice game
         await page.click('#play-random');
@@ -128,7 +138,7 @@ test.describe('Asmrandle E2E Tests', () => {
     });
 
     test('Card click functionality and game progression', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto(BASE_URL);
         
         // Start a practice game
         await page.click('#play-random');
@@ -150,7 +160,7 @@ test.describe('Asmrandle E2E Tests', () => {
     });
 
     test('Cookie retrieved correctly and used', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto(BASE_URL);
 
             // Use a UTC date offset by 6 hours so the daily challenge resets at 6:00 UTC
     const now = new Date();
@@ -183,7 +193,7 @@ test.describe('Asmrandle E2E Tests', () => {
 
     test('Play full game', async ({ page }) => {
         test.setTimeout(2 * 60 * 1000); // Extend timeout to 2 minutes
-        await page.goto('http://localhost:3000');
+        await page.goto(BASE_URL);
         
         // Start a practice game
         await page.click('#play-random');
@@ -191,11 +201,7 @@ test.describe('Asmrandle E2E Tests', () => {
         // Wait for game to load
         await page.waitForSelector('#game', { timeout: 10000 });
         
-        // Play until results are shown (max 20 rounds to avoid hanging).
-        for (let i = 0; i < 20; i++) {
-            if (await page.locator('#result').isVisible()) {
-                break;
-            }
+        for (let i = 0; i < 10; i++) {
             // Wait for cards to load
             await page.waitForSelector('.card img', { timeout: 15000 });
             
@@ -203,14 +209,8 @@ test.describe('Asmrandle E2E Tests', () => {
             await page.click('.card:first-child');
             
             // Wait for overlay to appear and disappear
-            try {
-                await page.waitForSelector('.overlay', { state: 'visible', timeout: 2000 });
-                await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
-            } catch (error) {
-                if (!(await page.locator('#result').isVisible())) {
-                    throw error;
-                }
-            }
+            await page.waitForSelector('.overlay', { state: 'visible', timeout: 2000 });
+            await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
         }
         
         // After 10 cards, check that results are shown
@@ -219,10 +219,27 @@ test.describe('Asmrandle E2E Tests', () => {
         expect(resultsText).toMatch(/\d+\/10/); // Should show score out of 10
     });
 
+    test('Daily results are saved and included in community totals', async ({ page }) => {
+        await page.unroute('**/api/community');
+        await page.goto(BASE_URL);
+        const before = await (await page.request.get(`${BASE_URL}/api/community`)).json();
+        const total = data => [...data.counts, ...data.hardModeCounts].reduce((sum, count) => sum + count, 0);
+        await page.click('#start-daily');
+        for (let i = 0; i < 10; i++) {
+            await page.waitForSelector('.card img');
+            await page.click('.card:first-child');
+            await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
+        }
+        await expect(page.locator('#result')).toBeVisible();
+        await expect(page.locator('#community-results')).toBeVisible();
+        const after = await (await page.request.get(`${BASE_URL}/api/community`)).json();
+        expect(total(after)).toBe(total(before) + 1);
+    });
+
     test('Hard mode cookie retrieved correctly and used', async ({ page, context }) => {
         // Grant clipboard permissions
         await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-        await page.goto('http://localhost:3000');
+        await page.goto(BASE_URL);
 
         // Use a UTC date offset by 6 hours so the daily challenge resets at 6:00 UTC
         const now = new Date();
@@ -258,7 +275,7 @@ test.describe('Asmrandle E2E Tests', () => {
     });
 
     test('Community results page loads correctly', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto(BASE_URL);
 
         // Use a UTC date offset by 6 hours so the daily challenge resets at 6:00 UTC
         const now = new Date();
@@ -316,7 +333,7 @@ test.describe('Asmrandle E2E Tests', () => {
 
     test('Page performance and loading', async ({ page }) => {
         const startTime = Date.now();
-        await page.goto('http://localhost:3000');
+        await page.goto(BASE_URL);
         
         // Wait for page to be fully loaded
         await page.waitForLoadState('networkidle');

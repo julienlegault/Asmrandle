@@ -1,6 +1,9 @@
 {
   "name": "Asmrandle",
-  "image": "mcr.microsoft.com/devcontainers/python:3.11-bullseye",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "runServices": ["app", "db", "scheduler"],
+  "workspaceFolder": "/workspaces/Asmrandle",
   "features": {
     "ghcr.io/devcontainers/features/node:1": {
       "version": "20"
@@ -9,7 +12,7 @@
   "forwardPorts": [8000],
   "portsAttributes": {
     "8000": {
-      "label": "Asmrandle Web Server",
+      "label": "Asmrandle",
       "onAutoForward": "notify"
     }
   },
@@ -19,14 +22,7 @@
         "ms-playwright.playwright",
         "esbenp.prettier-vscode",
         "dbaeumer.vscode-eslint"
-      ],
-      "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "python.linting.enabled": true,
-        "python.linting.pylintEnabled": true,
-        "editor.formatOnSave": true,
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-      }
+      ]
     }
   },
   "postCreateCommand": "bash .devcontainer/post-create.sh",

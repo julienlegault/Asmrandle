@@ -3,15 +3,15 @@
   "version": "1.0.0",
   "description": "A daily Magic: The Gathering card popularity prediction game",
   "scripts": {
-    "server": "python -m http.server 8000",
+    "server": "php backend/artisan serve --host=0.0.0.0 --port=8000",
     "test": "playwright test",
     "test:debug": "playwright test --debug",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
-    "update-cards": "python pullCards.py"
+    "update-cards": "php backend/artisan cards:import --seed-random"
   },
   "devDependencies": {
-    "@playwright/test": "^latest"
+    "@playwright/test": "^1.56.1"
   },
   "keywords": [
     "magic-the-gathering",

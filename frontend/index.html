@@ -604,7 +604,6 @@
     "inLanguage": "en-US"
   }
   </script>
-  <script async src="https://cdn.jsdelivr.net/npm/counterapi/dist/counter.browser.min.js"></script>
 </head>
 <body>
   <img src="images/Logo-Splash.png" alt="Asmrandle" class="main-logo logo-full" id="main-logo">
@@ -617,6 +616,11 @@
       <input type="checkbox" id="hard-mode" />
       <label for="hard-mode">Hard Mode</label>
     </div>
+    <div id="fast-mode-setting" hidden>
+      <input type="checkbox" id="fast-mode" />
+      <label for="fast-mode">Fast Mode (development)</label>
+    </div>
+    <p id="game-error" role="alert"></p>
   </div>
   <div class="scoreboard" id="scoreboard"></div>
   <div class="game-area" id="game"></div>
@@ -641,9 +645,6 @@
     <p>Portions of Asmrandle are unofficial Fan Content permitted under the Wizards of the Coast Fan Content Policy. The literal and graphical information presented on this site about Magic: The Gathering, including card images and mana symbols, is copyright Wizards of the Coast, LLC. Asmrandle is not produced by or endorsed by Wizards of the Coast.</p>
   </div>
 
-  <!-- Load card list -->
-  <script src="./formatted_card_list.js"></script>
-  
   <script>
 
     const mainMenu = document.getElementById("main-menu");
@@ -660,15 +661,35 @@
     let correctCount = 0;
     let gameType = 0; // 0 = practice, 1 = daily
     let resultToCopy = "";
-    let shuffled = [];
     let hardMode = false;
     let resultArray = [];
     let communityDataPromise = null;
-    let firstTenCheckPromise = null;
+    let firstTen = false;
+    let gameId = null;
+    let fastModeAvailable = false;
+    let submissionId = null;
+    const gameError = document.getElementById("game-error");
 
-    // Configuration for development vs production
-    const isLocalHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '';
-    const CARD_DISPLAY_TIME = isLocalHost ? 200 : 2800;
+    async function api(path, options = {}) {
+      const response = await fetch(`/api${path}`, {
+        ...options,
+        headers: { "Content-Type": "application/json", ...options.headers }
+      });
+      if (!response.ok) {
+        const error = new Error(`Request failed (${response.status}): ${path}`);
+        error.status = response.status;
+        throw error;
+      }
+      return response.json();
+    }
+
+    api('/config').then(config => {
+      fastModeAvailable = config.fastModeAvailable;
+      document.getElementById("fast-mode-setting").hidden = !fastModeAvailable;
+    }).catch(error => {
+      console.error(error);
+      gameError.textContent = "Could not load development settings.";
+    });
 
     // Use a UTC date offset by 6 hours so the daily challenge resets at 6:00 UTC,
     // matching when the play counters are reset.
@@ -680,51 +701,6 @@
     const dateStr = `${yyyy}-${mm}-${dd}`;
     const dateStrSanatized = `${yyyy}${mm}${dd}`;
     const juneFirstPerfectScorePattern = "🟧🟨🟩🟦🟪🟪🟦🟩🟨🟧";
-    let counter;
-
-    document.addEventListener("DOMContentLoaded", () => {
-      counter = new Counter({workspace: "asmrandle"});
-    });
-
-    // Simple seeded RNG using Mulberry32
-    function mulberry32(seed) {
-      let t = seed;
-      return function() {
-        t |= 0;
-        t = (t + 0x6D2B79F5) | 0;
-        let r = Math.imul(t ^ (t >>> 15), 1 | t);
-        r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
-        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-      };
-    }
-
-    // Convert the date string into a numeric seed
-    let seed = dateStrSanatized;
-    let rng = mulberry32(parseInt(seed));
-    const juneFirstShuffledList = [
-      "chandra-torch-of-defiance",
-      "nissa-who-shakes-the-world",
-      "ral-zarek",
-      "tomik-wielder-of-law",
-      "rowan-kenrith",
-      "saheeli-rai",
-      "felothar-dawn-of-the-abzan",
-      "alesha-who-smiles-at-death",
-      "heiko-yamazaki-the-general",
-      "ashiok-nightmare-muse",
-      "joined-researchers",
-      "rapturous-moment",
-      "hallar-the-firefletcher",
-      "kynaios-and-tiro-of-meletis",
-      "tivit-seller-of-secrets",
-      "karn-the-great-creator",
-      "niko-light-of-hope",
-      "kirol-attentive-first-year",
-      "nissa-vastwood-seer",
-      "chandra-dressed-to-kill",
-      "sol-ring",
-      "arcane-signet"
-    ];
 
     // Logo switching functions
     function switchToPlayLogo() {
@@ -732,103 +708,11 @@
       logo.className = 'main-logo logo-play';
     }
 
-    // Shuffle using the seeded RNG (Fisher-Yates)
-    function shuffleSeeded(array, rng) {
-      let a = array.slice();
-      for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-      }
-      return a;
-    }
-
     function getResultEmojiString() {
       if (mm === '06' && dd === '01' && resultArray.length === 10 && resultArray.every(Boolean)) {
         return juneFirstPerfectScorePattern;
       }
       return resultArray.map(isCorrect => isCorrect ? "🟩" : "🟥").join("");
-    }
-
-    const REQUEST_STAGGER_MS = 150;
-
-    function staggered(delayMs, fn) {
-      return new Promise(resolve => setTimeout(() => resolve(fn()), delayMs));
-    }
-
-    async function getCount(score, hm = false, retries = 2) {
-      try {
-        // Ensure counter is initialized (critical for Android Chrome)
-        if (!counter) {
-          counter = new Counter({workspace: "asmrandle"});
-        }
-        let data;
-        if (hm) {
-          data = await counter.get(`dailyhm${score}`);
-        } else {
-          data = await counter.get(`daily${score}`);
-        }
-        return data.data.up_count;
-      } catch (error) {
-        // A counter that has never been upped doesn't exist: 404 is a real zero
-        if (error && error.status === 404) {
-          return 0;
-        }
-        // Retry on mobile networks (common issue with Android Chrome)
-        if (retries > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-          return getCount(score, hm, retries - 1);
-        }
-        // null = "unknown", so a failed request is never mistaken for a real zero
-        return null;
-      }
-    }
-
-    async function getQuestionCount(questionNum, retries = 2) {
-      try {
-        if (!counter) {
-          counter = new Counter({workspace: "asmrandle"});
-        }
-        const key = hardMode ? `correcthm${questionNum}` : `correct${questionNum}`;
-        const data = await counter.get(key);
-        return data.data.up_count;
-      } catch (error) {
-        if (error && error.status === 404) {
-          return 0;
-        }
-        if (retries > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return getQuestionCount(questionNum, retries - 1);
-        }
-        return null;
-      }
-    }
-
-    function increaseCount(score = -1) {
-      // Ensure counter is initialized (critical for Android Chrome)
-      if (!counter) {
-        counter = new Counter({workspace: "asmrandle"});
-      }
-      
-      if (score >= 0) {
-        if (hardMode) {
-          counter.up(`dailyhm${score}`).catch(() => {
-            // Ignore any errors
-          });
-        } else {
-          counter.up(`daily${score}`).catch(() => {
-            // Ignore any errors
-          });
-        }
-        for (let i = 0; i < resultArray.length; i++) {
-          if (resultArray[i]) {
-            const slug = hardMode ? `correcthm${i + 1}` : `correct${i + 1}`;
-            counter.up(slug).catch(() => {});
-          }
-        }
-      }
-      counter.up(`plays`).catch(() => {
-        // Ignore any errors
-      });
     }
 
     // Cookie utility functions
@@ -919,95 +803,19 @@
       }
     }
 
-    async function fetchCardData(idx) {
-      const name = shuffled[idx++];
-        try {
-          const cardRes = await fetch(`https://json.edhrec.com/pages/cards/${name}.json`);
-          if (!cardRes.ok) return fetchCardData(20 +idx);
-          const data = await cardRes.json();
-          const card = data?.container?.json_dict?.card;
-          if (!card) return fetchCardData(20 +idx);
-          const inclusion = parseFloat(card.num_decks);
-          const potential = parseFloat(card.potential_decks);
-          let flavorText = "No flavor text available";
-          let imageUrl = card.image_uris?.[0]?.normal || null;
-          let artImg = null;
-          if (hardMode) {
-            try {
-              const scryfallRes = await fetch(`https://api.scryfall.com/cards/${card.id}`);
-              if (!scryfallRes.ok) return fetchCardData(20 +idx);
-              const scryfallData = await scryfallRes.json();
-              flavorText = scryfallData?.flavor_text || "No flavor text available";
-              artImg = scryfallData?.image_uris?.art_crop || scryfallData?.card_faces?.[0]?.image_uris?.art_crop || imageUrl;
-            } catch (err) {
-              return fetchCardData(20 +idx);
-            }
-          }
-          if (!isFinite(inclusion) || !isFinite(potential) || potential === 0) return fetchCardData(20 +idx);
-          const popularity = (inclusion / potential) * 100;
-          return ({
-            name,
-            popularity,
-            img: imageUrl,
-            artImg,
-            flavorText
-          });
-        } catch (err) {
-          // on network / parse error, skip this card and continue
-          return fetchCardData(20 +idx);
-        }
+    async function fetchRound(round) {
+      const data = await api(`/games/${encodeURIComponent(gameId)}/rounds/${round}`);
+      if (!Array.isArray(data.cards) || data.cards.length !== 2) throw new Error("Invalid card data");
+      cardData.splice(round * 2, 2, ...data.cards);
     }
 
-    function fetchAllCardData() {
-      const promises = [];
-      for (let i = 0; i < 20; i++) {
-        promises.push(fetchCardData(i).then(data => {
-          cardData[i] = data;
-        }));
-      }
-      return Promise.all(promises);
+    async function fetchAllCardData() {
+      for (let round = 0; round < 10; round++) await fetchRound(round);
     }
 
     async function fetchCommunityData() {
-      try {
-        // Add timeout for mobile reliability
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout after 10 seconds')), 10000)
-        );
-        // Fetch all counts with staggered starts so the burst of 22 requests
-        // doesn't trip the CounterAPI rate limit (which made the later
-        // requests, daily10/dailyhm10, fail preferentially)
-        const countPromises = [];
-        for (let i = 0; i <= 10; i++) {
-          countPromises.push(staggered(i * REQUEST_STAGGER_MS, () => getCount(i)));
-        }
-        const hardModePromises = [];
-        for (let i = 0; i <= 10; i++) {
-          hardModePromises.push(staggered((11 + i) * REQUEST_STAGGER_MS, () => getCount(i, true)));
-        }
-
-        const counts = await Promise.race([
-          Promise.all(countPromises),
-          timeoutPromise
-        ]);
-
-        const hardModeCounts = await Promise.race([
-          Promise.all(hardModePromises),
-          timeoutPromise
-        ]);
-
-        // Fetch per-question correct counts
-        const questionCountPromises = [];
-        for (let i = 1; i <= 10; i++) {
-          questionCountPromises.push(staggered((i - 1) * REQUEST_STAGGER_MS, () => getQuestionCount(i)));
-        }
-        const questionTimeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 8000));
-        const questionCounts = await Promise.race([Promise.all(questionCountPromises), questionTimeoutPromise]);
-
-        return { counts, hardModeCounts, questionCounts };
-      } catch (error) {
-        return null;
-      }
+      const data = await api('/community');
+      return { ...data, questionCounts: data.questions[hardMode ? 1 : 0] };
     }
 
     async function showCommunityResults(replay=false) {
@@ -1029,27 +837,13 @@
           totalPlayers += (counts[i] || 0) + (hardModeCounts[i] || 0);
         }
         let isFirst10 = false;
-        if (!replay && correctCount === 10 && firstTenCheckPromise) {
-          // Use counts re-fetched at result time, not the snapshot from game
-          // start. Strict === 0 so a failed fetch (null) never counts as first.
-          const [dailyTens, hardTens] = await firstTenCheckPromise;
-          if (dailyTens === 0 && hardTens === 0) {
+        if (!replay && firstTen) {
             resultText.textContent = `${dateStr} | ✨ Today's first 10 ✨`;
             resultToCopy = `✨✨✨✨✨✨✨✨✨✨ | Today's First 10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
             isFirst10 = true;
-          }
         }
         if (totalPlayers !== 0) {
           communityResults.style.display = "block"; // Show if data exists
-        }
-
-        if(!replay){
-           totalPlayers++;
-           if (hardMode) {
-             hardModeCounts[correctCount] = (hardModeCounts[correctCount] || 0) + 1;
-           } else {
-             counts[correctCount] = (counts[correctCount] || 0) + 1;
-           }
         }
 
         // Create header with toggle functionality
@@ -1195,9 +989,6 @@
           for (let i = 0; i < questionCounts.length; i++) {
             let qCount = questionCounts[i];
             if (qCount === null || !resultItems[i]) continue;
-            if (!replay && resultArray[i]) {
-              qCount++;
-            }
             const playersForMode = hardMode ? hardModePlayers : normalModePlayers;
             const pct = playersForMode > 0
               ? Math.min(100, ((qCount / playersForMode) * 100).toFixed(1))
@@ -1212,6 +1003,9 @@
         }
         
       } catch (error) {
+        console.error(error);
+        communityResults.textContent = "Community results are temporarily unavailable.";
+        communityResults.style.display = "block";
       }
     }
 
@@ -1289,84 +1083,103 @@
 
     async function loadCards(type) {
       hardMode = document.querySelector("#hard-mode").checked;
+      cardData = [];
+      resultArray = [];
+      currentPair = 0;
+      correctCount = 0;
+      gameType = 0;
+      scoreboard.innerHTML = "";
+      gameError.textContent = "";
       mainMenu.style.display = "none";
       switchToPlayLogo();
-      if (type === 'daily') {
-        todayCookie = getCookie(`${dateStrSanatized}`);
-        shuffled = shuffleSeeded(window.cardList, rng); // shuffle with seed for daily mode
-        if (mm === '06' && dd === '01') {
-          shuffled = juneFirstShuffledList;
-        }
-        if (todayCookie !== null) {
-          const cookieParts = todayCookie.split("|");
-          hardMode = cookieParts.includes("HM");
-          communityDataPromise = fetchCommunityData(); // Start background fetch early
-          await fetchAllCardData();
-          resultArray = cookieParts[0].split(",").map(item => item === 'true');
-          if (resultArray.length !== 10) {
-            resultArray = Array(10).fill(false);
-          }
-          correctCount = resultArray.filter(item => item).length;
-          resultToCopy = getResultEmojiString();
-          resultToCopy += ` ${correctCount}/10`;
-          resultText.textContent = `You have already played today's Asmrandle! Your score was ${correctCount}/10.`;
-          startCountdown(); // Start the live countdown timer
-          resultToCopy += ` ${hardMode?'| Hard Mode ':''}| ${dateStr} | https://asmrandle.com`;
-          gameArea.style.display = "none";
-          result.style.display = "block";
-          showCommunityResults(true);
-          showResultBreakdown();
-          return;
-        }
-        gameType = 1;
-        communityDataPromise = fetchCommunityData(); // Start background fetch while player plays
-      } else {
-        shuffled = [...window.cardList].sort(() => 0.5 - Math.random()); // shuffle full list
-      }
-
-      let idx = 0;
-      while (idx < 20) {
-        const name = shuffled[idx++];
-        cardData.push({
-          name,
-          popularity: null,
-          img: null,
-          artImg: null,
-          flavorText: null
+      try {
+        const game = await api('/games', {
+          method: 'POST',
+          body: JSON.stringify({ mode: type === 'daily' ? 'daily' : 'practice' })
         });
+        if (game.date !== dateStr) throw new Error("The daily challenge changed. Reload the page.");
+        gameId = game.id;
+        if (type === 'daily') {
+          const todayCookie = getCookie(`${dateStrSanatized}`);
+          if (todayCookie !== null) {
+            const cookieParts = todayCookie.split("|");
+            hardMode = cookieParts.includes("HM");
+            await fetchAllCardData();
+            communityDataPromise = fetchCommunityData();
+            resultArray = cookieParts[0].split(",").map(item => item === 'true');
+            if (resultArray.length !== 10) {
+              resultArray = Array(10).fill(false);
+            }
+            correctCount = resultArray.filter(item => item).length;
+            resultToCopy = getResultEmojiString();
+            resultToCopy += ` ${correctCount}/10`;
+            resultText.textContent = `You have already played today's Asmrandle! Your score was ${correctCount}/10.`;
+            startCountdown(); // Start the live countdown timer
+            resultToCopy += ` ${hardMode?'| Hard Mode ':''}| ${dateStr} | https://asmrandle.com`;
+            gameArea.style.display = "none";
+            result.style.display = "block";
+            showCommunityResults(true);
+            showResultBreakdown();
+            return;
+          }
+          gameType = 1;
+        }
+        submissionId = sessionStorage.getItem(`submission-${dateStrSanatized}`) || crypto.randomUUID();
+        sessionStorage.setItem(`submission-${dateStrSanatized}`, submissionId);
+        await fetchRound(0);
+        for (let i = 0; i < 10; i++) {
+          const dot = document.createElement("div");
+          dot.className = "dot";
+          scoreboard.appendChild(dot);
+        }
+        showNextPair();
+      } catch (error) {
+        console.error(error);
+        mainMenu.style.display = "";
+        gameError.textContent = "Could not start the game. Please try again or reload the page.";
       }
-
-      await fetchCardData(0).then(data => {
-        cardData[0] = data;
-      });
-      await fetchCardData(1).then(data2 => {
-        cardData[1] = data2;
-      });
-      for (let i = 0; i < 10; i++) {
-        const dot = document.createElement("div");
-        dot.className = "dot";
-        scoreboard.appendChild(dot);
-      }
-      showNextPair();
     }
 
-    function saveResults() {
+    async function saveResults() {
+      try {
+        const response = await api('/results', {
+          method: 'POST',
+          body: JSON.stringify({
+            mode: gameType === 1 ? 'daily' : 'practice',
+            date: dateStr,
+            hardMode,
+            answers: resultArray,
+            submissionId
+          })
+        });
         if (gameType === 1) {
-          if (correctCount === 10) {
-            // Fresh read of the score-10 counters, fired before increaseCount
-            // so it can't include our own play
-            firstTenCheckPromise = Promise.all([getCount(10), getCount(10, true)]);
-          }
-          increaseCount(correctCount);
+          firstTen = response.firstTen;
+          communityDataPromise = fetchCommunityData();
           copyResultsBtn.style.display = "inline-block";
           setCookie(`${dateStrSanatized}`, `${resultArray}|${correctCount}${hardMode?'|HM':''}`, 30); // Set cookie for 30 days
           showResults();
         } else {
-          increaseCount();
           copyResultsBtn.style.display = "none";
           showResults();
         }
-        return;
+      } catch (error) {
+        console.error(error);
+        if (error.status === 409) {
+          showRetry("The daily challenge has changed. Reload to play the new challenge.", () => location.reload(), "Reload");
+        } else {
+          showRetry("Could not save your results.", saveResults);
+        }
+      }
+    }
+
+    function showRetry(message, action, label = "Retry") {
+      gameArea.innerHTML = "";
+      const text = document.createElement("p");
+      text.textContent = message;
+      const button = document.createElement("button");
+      button.textContent = label;
+      button.onclick = action;
+      gameArea.append(text, button);
     }
 
     function showResults() {
@@ -1445,21 +1258,22 @@
       };
 
       currentPair++;
-      const idx1 = currentPair * 2;
-      const idx2 = idx1 + 1;
       const startWait = Date.now();
-      await fetchCardData(idx1).then(data => {
-          cardData[idx1] = data;
-      });
-      await fetchCardData(idx2).then(data2 => {
-          cardData[idx2] = data2;
-      });
-      const elapsed = Date.now() - startWait;
-      const waitTime = Math.max(CARD_DISPLAY_TIME - elapsed, 0);
-      setTimeout(() => {
-        overlays.forEach(o => o.remove());
-        showNextPair();
-      }, waitTime);
+      const next = async () => {
+        try {
+          if (currentPair < 10) await fetchRound(currentPair);
+          const elapsed = Date.now() - startWait;
+          const displayTime = fastModeAvailable && document.getElementById("fast-mode").checked ? 200 : 2800;
+          setTimeout(() => {
+            overlays.forEach(o => o.remove());
+            showNextPair();
+          }, Math.max(displayTime - elapsed, 0));
+        } catch (error) {
+          console.error(error);
+          showRetry("Could not load the next cards.", next);
+        }
+      };
+      await next();
     }
   </script>
 </body>

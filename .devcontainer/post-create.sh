@@ -1,24 +1,12 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
 
-echo "🚀 Setting up Asmrandle development environment..."
+composer install --working-dir=backend --no-interaction
+npm ci
+npx playwright install --with-deps chromium
 
-# Install Python dependencies
-echo "📦 Installing Python dependencies..."
-pip install --upgrade pip
-pip install -r requirements.txt 2>/dev/null || echo "No requirements.txt found"
-
-# Install Node dependencies for testing
-echo "📦 Installing Node dependencies..."
-npm install --save-dev @playwright/test
-
-# Install Playwright browsers
-echo "🎭 Installing Playwright browsers..."
-npx playwright install
-
-echo "✅ Setup complete! Ready for development and testing."
-echo ""
-echo "Available commands:"
-echo "  - npm test                 # Run E2E tests"
-echo "  - npm run server           # Start the web server (port 8000)"
-echo "  - python pullCards.py      # Update card database"
+if [[ ! -f backend/.env ]]; then
+  cp backend/.env.example backend/.env
+  php backend/artisan key:generate
+fi

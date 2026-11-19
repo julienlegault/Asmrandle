@@ -1,5 +1,12 @@
 node_modules/
-package-lock.json
+.env
+.env.*
+!.env.example
+/auth.json
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
 playwright-report/
 test-results/
 __pycache__/
