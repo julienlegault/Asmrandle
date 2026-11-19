@@ -74,7 +74,13 @@ Route::middleware('throttle:120,1')->group(function () {
             abort_unless($challenge, 409, 'The daily challenge has not been started.');
             $existing = DB::table('game_results')->where('submission_id', $data['submissionId'])->first();
             if ($existing) {
-                abort_unless($existing->date === $data['date'], 409);
+                abort_unless(
+                    $existing->date === $data['date']
+                    && (bool) $existing->hard_mode === (bool) $data['hardMode']
+                    && json_decode($existing->answers, true, flags: JSON_THROW_ON_ERROR) === array_map(boolval(...), $data['answers']),
+                    409,
+                    'This submission ID belongs to a different result.'
+                );
 
                 return ['firstTen' => (bool) $existing->first_ten];
             }

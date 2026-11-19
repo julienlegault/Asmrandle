@@ -34,8 +34,13 @@ test.describe('Asmrandle E2E Tests', () => {
     test('Fast Mode is optional and changes the card delay', async ({ page }) => {
         await page.goto(BASE_URL);
         await expect(page.locator('#fast-mode-setting')).toBeVisible();
+        await expect(page.getByRole('switch', { name: 'Fast Mode (development)' })).toBeChecked();
+        expect(await page.locator('#main-menu #fast-mode-setting').count()).toBe(0);
+        const bounds = await page.locator('#fast-mode-setting').boundingBox();
+        expect(bounds.y).toBeLessThan(30);
         await page.uncheck('#fast-mode');
         await page.click('#play-random');
+        await expect(page.locator('#fast-mode-setting')).toBeVisible();
         await page.waitForSelector('.card img');
 
         let started = Date.now();
@@ -54,6 +59,12 @@ test.describe('Asmrandle E2E Tests', () => {
         const fastElapsed = Date.now() - started;
         expect(fastElapsed).toBeGreaterThanOrEqual(150);
         expect(fastElapsed).toBeLessThan(1500);
+    });
+
+    test('Fast Mode is hidden when unavailable', async ({ page }) => {
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false } }));
+        await page.goto(BASE_URL);
+        await expect(page.locator('#fast-mode-setting')).toBeHidden();
     });
 
     test.afterEach(async ({ page }, testInfo) => {
@@ -234,6 +245,81 @@ test.describe('Asmrandle E2E Tests', () => {
         await expect(page.locator('#community-results')).toBeVisible();
         const after = await (await page.request.get(`${BASE_URL}/api/community`)).json();
         expect(total(after)).toBe(total(before) + 1);
+    });
+
+    test('Hard mode results are recorded and shown after finishing and replaying', async ({ page }) => {
+        await page.unroute('**/api/community');
+        await page.goto(BASE_URL);
+        const game = await (await page.request.post(`${BASE_URL}/api/games`, { data: { mode: 'daily' } })).json();
+        const oldSubmissionId = await page.evaluate(() => {
+            const id = crypto.randomUUID();
+            sessionStorage.setItem(`submission-${dateStrSanatized}`, id);
+            return id;
+        });
+        const oldResult = await page.request.post(`${BASE_URL}/api/results`, {
+            data: {
+                mode: 'daily', date: game.date, hardMode: false,
+                answers: Array(10).fill(true), submissionId: oldSubmissionId,
+            },
+        });
+        expect(oldResult.ok()).toBeTruthy();
+        const before = await (await page.request.get(`${BASE_URL}/api/community`)).json();
+        await page.check('#hard-mode');
+        await page.click('#start-daily');
+        for (let i = 0; i < 10; i++) {
+            await page.waitForSelector('.card img');
+            const choice = await page.evaluate(() =>
+                cardData[currentPair * 2].popularity >= cardData[currentPair * 2 + 1].popularity ? 0 : 1
+            );
+            await page.locator('.card').nth(choice).click();
+            await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
+        }
+
+        await expect(page.locator('#result-text')).toContainText('10');
+        const after = await (await page.request.get(`${BASE_URL}/api/community`)).json();
+        expect(after.hardModeCounts[10]).toBe(before.hardModeCounts[10] + 1);
+        expect(after.questions[1]).toEqual(before.questions[1].map(count => count + 1));
+        const hardPlayers = after.hardModeCounts.reduce((sum, count) => sum + count, 0);
+        const expected = `${Math.min(100, (after.questions[1][0] / hardPlayers * 100).toFixed(1))}% of hard mode players got this question correct`;
+        await expect(page.locator('.question-correct-pct').first()).toHaveText(expected);
+        await page.click('.community-header');
+        await expect(page.locator('.bar-item').nth(10).locator('.bar-fill-hard-user')).toBeVisible();
+
+        await page.reload();
+        await page.click('#start-daily');
+        await expect(page.locator('.question-correct-pct').first()).toHaveText(expected);
+        await page.click('.community-header');
+        await expect(page.locator('.bar-item').nth(10).locator('.bar-fill-hard-user')).toBeVisible();
+    });
+
+    test('Retrying a lost result response does not duplicate the hard-mode play', async ({ page }) => {
+        await page.unroute('**/api/community');
+        await page.goto(BASE_URL);
+        const before = await (await page.request.get(`${BASE_URL}/api/community`)).json();
+        const submissions = [];
+        await page.route('**/api/results', async route => {
+            submissions.push(route.request().postDataJSON().submissionId);
+            if (submissions.length === 1) {
+                await route.fetch();
+                await route.abort();
+            } else {
+                await route.continue();
+            }
+        });
+        await page.check('#hard-mode');
+        await page.click('#start-daily');
+        for (let i = 0; i < 10; i++) {
+            await page.waitForSelector('.card img');
+            await page.locator('.card').first().click();
+            await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
+        }
+        await page.getByRole('button', { name: 'Retry' }).click();
+        await expect(page.locator('#result')).toBeVisible();
+        expect(submissions).toHaveLength(2);
+        expect(submissions[1]).toBe(submissions[0]);
+        const after = await (await page.request.get(`${BASE_URL}/api/community`)).json();
+        const total = counts => counts.reduce((sum, count) => sum + count, 0);
+        expect(total(after.hardModeCounts)).toBe(total(before.hardModeCounts) + 1);
     });
 
     test('Hard mode cookie retrieved correctly and used', async ({ page, context }) => {

@@ -108,6 +108,61 @@
       margin-top: 20px;
       margin-bottom: 15px;
     }
+
+    #fast-mode-setting:not([hidden]) {
+      display: flex;
+      justify-content: flex-end;
+      margin: 12px 12px 0;
+    }
+    .fast-mode-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+    .fast-mode-switch {
+      position: relative;
+      width: 42px;
+      height: 24px;
+    }
+    .fast-mode-switch input {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      opacity: 0;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .fast-mode-track {
+      display: block;
+      height: 100%;
+      border-radius: 12px;
+      background: #666;
+      transition: background-color 0.2s;
+    }
+    .fast-mode-track::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: white;
+      transition: transform 0.2s;
+    }
+    .fast-mode-switch input:checked + .fast-mode-track {
+      background: #63a452;
+    }
+    .fast-mode-switch input:checked + .fast-mode-track::after {
+      transform: translateX(18px);
+    }
+    .fast-mode-switch input:focus-visible + .fast-mode-track {
+      outline: 2px solid white;
+      outline-offset: 3px;
+    }
     
     /* Logo size variants */
     .logo-full {
@@ -606,6 +661,15 @@
   </script>
 </head>
 <body>
+  <div id="fast-mode-setting" hidden>
+    <label class="fast-mode-label">
+      Fast Mode (development)
+      <span class="fast-mode-switch">
+        <input type="checkbox" id="fast-mode" role="switch" />
+        <span class="fast-mode-track" aria-hidden="true"></span>
+      </span>
+    </label>
+  </div>
   <img src="images/Logo-Splash.png" alt="Asmrandle" class="main-logo logo-full" id="main-logo">
   <div class="main-menu" id="main-menu">
     <div>
@@ -615,10 +679,6 @@
     <div>
       <input type="checkbox" id="hard-mode" />
       <label for="hard-mode">Hard Mode</label>
-    </div>
-    <div id="fast-mode-setting" hidden>
-      <input type="checkbox" id="fast-mode" />
-      <label for="fast-mode">Fast Mode (development)</label>
     </div>
     <p id="game-error" role="alert"></p>
   </div>
@@ -1085,6 +1145,7 @@
       hardMode = document.querySelector("#hard-mode").checked;
       cardData = [];
       resultArray = [];
+      submissionId = null;
       currentPair = 0;
       correctCount = 0;
       gameType = 0;
@@ -1124,8 +1185,6 @@
           }
           gameType = 1;
         }
-        submissionId = sessionStorage.getItem(`submission-${dateStrSanatized}`) || crypto.randomUUID();
-        sessionStorage.setItem(`submission-${dateStrSanatized}`, submissionId);
         await fetchRound(0);
         for (let i = 0; i < 10; i++) {
           const dot = document.createElement("div");
@@ -1142,6 +1201,11 @@
 
     async function saveResults() {
       try {
+        const submissionKey = `submission-${dateStrSanatized}-${hardMode ? 1 : 0}-${resultArray.map(Number).join("")}`;
+        if (!submissionId) {
+          submissionId = (gameType === 1 && sessionStorage.getItem(submissionKey)) || crypto.randomUUID();
+          if (gameType === 1) sessionStorage.setItem(submissionKey, submissionId);
+        }
         const response = await api('/results', {
           method: 'POST',
           body: JSON.stringify({
@@ -1157,6 +1221,8 @@
           communityDataPromise = fetchCommunityData();
           copyResultsBtn.style.display = "inline-block";
           setCookie(`${dateStrSanatized}`, `${resultArray}|${correctCount}${hardMode?'|HM':''}`, 30); // Set cookie for 30 days
+          sessionStorage.removeItem(submissionKey);
+          sessionStorage.removeItem(`submission-${dateStrSanatized}`);
           showResults();
         } else {
           copyResultsBtn.style.display = "none";
@@ -1165,7 +1231,7 @@
       } catch (error) {
         console.error(error);
         if (error.status === 409) {
-          showRetry("The daily challenge has changed. Reload to play the new challenge.", () => location.reload(), "Reload");
+          showRetry("The daily challenge changed or this result conflicts with an earlier submission. Reload to continue.", () => location.reload(), "Reload");
         } else {
           showRetry("Could not save your results.", saveResults);
         }

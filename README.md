@@ -11,7 +11,7 @@ database, startup downloads Scryfall oracle cards and seeds **random**, fictiona
 EDHRec values. Existing data is not reimported or reseeded on restart. The
 initial download requires network access and can take several minutes.
 
-Open the forwarded port to play. The **Fast Mode** checkbox is available only
+Open the forwarded port to play. The **Fast Mode** switch in the top-right is available only
 when Laravel's `APP_ENV=local`; it changes the card reveal delay from 2800 ms
 to 200 ms. Production never exposes it.
 
@@ -39,7 +39,8 @@ browser test seeder must never be used for production data.
 
 The API persists one snapshot of 20 cards per daily challenge, and returns
 only the current pair. The challenge and community statistics roll over at
-06:00 UTC. Practice games have their own snapshots. Community results are
+06:00 UTC. Each press of Practice selects a new random snapshot of 20 eligible
+cards without replacement; the snapshot stays fixed for that game. Community results are
 stored in MySQL; historical CounterAPI counts are not automatically imported.
 Daily-result cookies created before this migration cannot reproduce the old
 client-generated puzzle.

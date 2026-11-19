@@ -65,6 +65,24 @@ class GameApiTest extends TestCase
         $this->assertNotEquals($first[0]['name'], $second[0]['name']);
     }
 
+    public function test_each_practice_game_selects_a_fresh_snapshot(): void
+    {
+        DB::table('cards')->where('id', '>', 20)->update(['legal' => false]);
+        $firstId = $this->postJson('/api/games', ['mode' => 'practice'])->assertOk()->json('id');
+        $first = $this->getJson("/api/games/{$firstId}/rounds/0")->assertOk()->json('cards');
+
+        DB::table('cards')->where('slug', $first[0]['name'])->update(['legal' => false]);
+        DB::table('cards')->where('id', 21)->update(['legal' => true]);
+        $secondId = $this->postJson('/api/games', ['mode' => 'practice'])->assertOk()->json('id');
+
+        $this->assertNotSame($firstId, $secondId);
+        $this->getJson("/api/games/{$firstId}/rounds/0")->assertOk()->assertJsonPath('cards', $first);
+        $cards = json_decode(DB::table('practice_games')->where('id', $secondId)->value('cards'), true);
+        $this->assertCount(20, $cards);
+        $this->assertNotContains($first[0]['name'], array_column($cards, 'name'));
+        $this->assertContains('card-20', array_column($cards, 'name'));
+    }
+
     public function test_june_challenge_can_fill_unavailable_special_cards(): void
     {
         Carbon::setTestNow('2026-06-01 12:00:00 UTC');
@@ -90,8 +108,34 @@ class GameApiTest extends TestCase
             ->assertJsonPath('hardModeCounts.10', 2)
             ->assertJsonPath('counts.10', 0)
             ->assertJsonPath('questions.1.0', 2);
+        $data['submissionId'] = (string) Str::uuid();
+        $data['answers'][0] = false;
+        $this->postJson('/api/results', $data)->assertOk()->assertJsonPath('firstTen', false);
+        $this->getJson('/api/community')->assertOk()
+            ->assertJsonPath('hardModeCounts.9', 1)
+            ->assertJsonPath('questions.1.0', 2)
+            ->assertJsonPath('questions.1.1', 3)
+            ->assertJsonPath('questions.0.1', 0);
         $data['answers'] = [true];
         $this->postJson('/api/results', $data)->assertUnprocessable();
+    }
+
+    public function test_daily_submission_id_cannot_be_reused_for_different_results(): void
+    {
+        $this->postJson('/api/games', ['mode' => 'daily'])->assertOk();
+        $data = [
+            'mode' => 'daily',
+            'date' => '2026-03-15',
+            'hardMode' => false,
+            'answers' => array_fill(0, 10, true),
+            'submissionId' => (string) Str::uuid(),
+        ];
+        $this->postJson('/api/results', $data)->assertOk();
+        $data['hardMode'] = true;
+        $this->postJson('/api/results', $data)->assertStatus(409);
+        $data['hardMode'] = false;
+        $data['answers'][0] = false;
+        $this->postJson('/api/results', $data)->assertStatus(409);
     }
 
     public function test_practice_results_can_be_saved_after_the_daily_rollover(): void
