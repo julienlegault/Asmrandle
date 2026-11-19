@@ -6,6 +6,8 @@ services:
     volumes:
       - ..:/workspaces/Asmrandle:cached
     working_dir: /workspaces/Asmrandle
+    ports:
+      - "8000:8000"
     command: sleep infinity
     depends_on:
       db:
