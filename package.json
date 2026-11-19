@@ -1,0 +1,24 @@
+{
+  "name": "asmrandle",
+  "version": "1.0.0",
+  "description": "A daily Magic: The Gathering card popularity prediction game",
+  "scripts": {
+    "server": "python -m http.server 8000",
+    "test": "playwright test",
+    "test:debug": "playwright test --debug",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "update-cards": "python pullCards.py"
+  },
+  "devDependencies": {
+    "@playwright/test": "^latest"
+  },
+  "keywords": [
+    "magic-the-gathering",
+    "game",
+    "edh",
+    "commander"
+  ],
+  "author": "",
+  "license": "ISC"
+}

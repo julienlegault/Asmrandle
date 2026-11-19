@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  asmrandle:
+    image: mcr.microsoft.com/devcontainers/python:3.11-bullseye
+    container_name: asmrandle-dev
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      bash -c "
+        echo 'Installing dependencies...' &&
+        pip install --upgrade pip &&
+        npm install --save-dev @playwright/test &&
+        npx playwright install &&
+        echo 'Starting HTTP server on port 8000...' &&
+        python -m http.server 8000
+      "
+    networks:
+      - asmrandle-network
+
+networks:
+  asmrandle-network:
+    driver: bridge
