@@ -13,6 +13,11 @@ the tunnel while setup is still running and keep returning 502 afterwards.
 Instead it is auto-forwarded (with the label and preview from `portsAttributes`)
 once the server starts listening, which only happens after setup completes.
 
+Open `/admin` on the forwarded port to access the admin dashboard. Admin forms
+and redirects use relative URLs so the browser stays on the forwarded origin.
+Create credentials from the container terminal as described in the project
+README.
+
 Seeding is offline: [DevelopmentSeeder](../backend/database/seeders/DevelopmentSeeder.php)
 creates every card from `backend/data/formatted_card_list.js` with deterministic
 fake EDHRec popularity. Card images load lazily in the browser from Scryfall.

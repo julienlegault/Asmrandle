@@ -47,6 +47,23 @@ stored in MySQL; historical CounterAPI counts are not automatically imported.
 Daily-result cookies created before this migration cannot reproduce the old
 client-generated puzzle.
 
+## Admin dashboard
+
+After running migrations, create or update an admin account with
+`php backend/artisan admin:set USERNAME`. Enter and confirm the password at
+the hidden prompts; use 12-72 bytes. Updating a password invalidates existing
+sessions for that account. Visit `/admin` to log in and view the dashboard.
+Login attempts are rate-limited. Serve the site over HTTPS in production and
+set `SESSION_SECURE_COOKIE=true`; use shared database-backed sessions and
+cache across instances.
+
+Counts represent completed submissions, not games started. All-time totals
+include only results recorded by this backend (not historical CounterAPI
+counts). "Today" follows the game's 06:00 UTC rollover. The graph shows daily
+score distributions because practice scores are not stored. Daily card
+percentages come from the challenge snapshot; answer percentages are based on
+completed results in each mode.
+
 ## Data refresh and Google Cloud
 
 The production scheduler runs `cards:import` on the first of each month at
