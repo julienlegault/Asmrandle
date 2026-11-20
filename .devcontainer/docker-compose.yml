@@ -24,10 +24,11 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      test: ["CMD-SHELL", "mysql -h localhost -u asmrandle -pasmrandle asmrandle -e 'SELECT 1' --silent"]
       interval: 5s
-      timeout: 5s
+      timeout: 10s
       retries: 30
+      start_period: 10s
 
 volumes:
   mysql-data:
