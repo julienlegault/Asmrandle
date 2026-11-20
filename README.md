@@ -64,6 +64,22 @@ score distributions because practice scores are not stored. Daily card
 percentages come from the challenge snapshot; answer percentages are based on
 completed results in each mode.
 
+Admins can schedule a seeded daily run by selecting a game date, 20 distinct
+playable cards in round order, and optionally a sequence of exactly 10 emojis
+for perfect-score shares. The dashboard lists saved seeded runs and supports
+editing, deleting, and copying them to a new date. Card statistics are
+snapshotted when saved. Add cards through the picker or fill empty slots with
+random playable cards, then drag their images to swap positions (or use the
+move buttons). The displayed percentages are the current EDHRec values that
+will be snapshotted. A run cannot be edited or deleted after it starts or its
+game date passes, so all players see the same challenge.
+
+The admin browser test requires the disposable SQLite setup above, plus an
+admin account created with `php backend/artisan admin:set USERNAME` using the
+same database settings. Run it with `ASMRANDLE_BASE_URL`,
+`ASMRANDLE_ADMIN_TEST_USERNAME`, and `ASMRANDLE_ADMIN_TEST_PASSWORD` set;
+it creates and deletes runs dated 2099-12-30 and 2099-12-31.
+
 ## Data refresh and Google Cloud
 
 The production scheduler runs `cards:import` on the first of each month at

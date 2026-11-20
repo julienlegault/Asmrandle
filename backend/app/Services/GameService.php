@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -49,6 +50,11 @@ class GameService
             throw new RuntimeException('At least 20 playable cards are required.');
         }
 
+        return $this->snapshot($cards);
+    }
+
+    public function snapshot(Collection $cards): array
+    {
         return $cards->map(fn ($card) => [
             'name' => $card->slug,
             'popularity' => $card->inclusion / $card->potential_decks * 100,
@@ -60,19 +66,24 @@ class GameService
 
     public function daily(string $date): array
     {
-        $challenge = DB::table('daily_challenges')->where('date', $date)->first();
-        if (! $challenge) {
-            $cards = $this->selectCards($date);
-            DB::table('daily_challenges')->insertOrIgnore([
-                'date' => $date,
-                'cards' => json_encode($cards, JSON_THROW_ON_ERROR),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-            $challenge = DB::table('daily_challenges')->where('date', $date)->firstOrFail();
-        }
+        return DB::transaction(function () use ($date) {
+            $challenge = DB::table('daily_challenges')->where('date', $date)->lockForUpdate()->first();
+            if (! $challenge) {
+                DB::table('daily_challenges')->insertOrIgnore([
+                    'date' => $date,
+                    'cards' => json_encode($this->selectCards($date), JSON_THROW_ON_ERROR),
+                    'started_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $challenge = DB::table('daily_challenges')->where('date', $date)->lockForUpdate()->firstOrFail();
+            }
+            if ($challenge->started_at === null) {
+                DB::table('daily_challenges')->where('date', $date)->update(['started_at' => now()]);
+            }
 
-        return json_decode($challenge->cards, true, flags: JSON_THROW_ON_ERROR);
+            return json_decode($challenge->cards, true, flags: JSON_THROW_ON_ERROR);
+        }, attempts: 3);
     }
 
     public function practice(): string

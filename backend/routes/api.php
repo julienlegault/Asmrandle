@@ -14,7 +14,9 @@ Route::middleware('throttle:120,1')->group(function () {
         if ($data['mode'] === 'daily') {
             $games->daily($date);
 
-            return ['id' => $date, 'date' => $date];
+            $emojis = DB::table('daily_challenges')->where('date', $date)->value('perfect_score_emojis');
+
+            return ['id' => $date, 'date' => $date, 'perfectScoreEmojis' => $emojis ? json_decode($emojis, true, flags: JSON_THROW_ON_ERROR) : null];
         }
 
         return ['id' => $games->practice(), 'date' => $date];

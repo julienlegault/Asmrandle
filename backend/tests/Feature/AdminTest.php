@@ -94,8 +94,10 @@ class AdminTest extends TestCase
         $this->withSession($session)->get('/admin')->assertOk()
             ->assertViewHas('totalGames', 7)->assertViewHas('practiceToday', 2)
             ->assertViewHas('counts', [[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]])
-            ->assertSee('Regular: 50.0% (1/2)')->assertSee('Hard: 100.0% (1/1)')
-            ->assertSee('Combined: 66.7% (2/3)')->assertSee('0.3%')
+            ->assertSee('Regular correct: 50.0%')->assertSee('Hard correct: 100.0%')
+            ->assertSee('Combined correct: 66.7%')->assertSee('0.3%')
+            ->assertDontSee('class="bar combined"')
+            ->assertDontSee('<span class="combined"></span> Combined', false)
             ->assertSee('https://example.test/0.jpg');
         Carbon::setTestNow('2026-03-16 06:00:00 UTC');
         $this->withSession($session)->get('/admin')->assertOk()

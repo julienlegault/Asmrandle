@@ -109,6 +109,39 @@ test.describe('Asmrandle E2E Tests', () => {
         await expect(page.locator('.scoreboard .dot')).toHaveCount(10);
     });
 
+    test('Custom perfect score emojis are shared for first ten and replay, but not imperfect scores', async ({ page }) => {
+        const pattern = '🟧🟨🟩🟦🟪🟪🟦🟩🟨🟧';
+        const date = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        await page.route('**/api/games', route => route.fulfill({ json: { id: date, date, perfectScoreEmojis: pattern } }));
+        await page.route('**/api/games/*/rounds/*', route => route.fulfill({ json: { cards: [
+            { name: 'first', popularity: 80, img: '/images/test.png', artImg: '/images/test.png', flavorText: '' },
+            { name: 'second', popularity: 20, img: '/images/test.png', artImg: '/images/test.png', flavorText: '' },
+        ] } }));
+        await page.route('**/api/results', route => route.fulfill({ json: { firstTen: true } }));
+        await page.goto(BASE_URL);
+        await page.click('#start-daily');
+        for (let i = 0; i < 10; i++) {
+            await page.locator('.card').first().click();
+            await page.waitForSelector('.overlay', { state: 'hidden', timeout: 5000 });
+        }
+        await expect(page.locator('#result-text')).toContainText("Today's first 10");
+        expect(await page.evaluate(() => resultToCopy)).toContain(pattern);
+
+        await page.reload();
+        await page.click('#start-daily');
+        await expect(page.locator('#result')).toBeVisible();
+        expect(await page.evaluate(() => resultToCopy)).toContain(pattern);
+
+        await page.context().addCookies([{
+            name: date.replaceAll('-', ''), value: 'false,true,true,true,true,true,true,true,true,true|9',
+            url: BASE_URL,
+        }]);
+        await page.reload();
+        await page.click('#start-daily');
+        await expect(page.locator('#result')).toBeVisible();
+        expect(await page.evaluate(() => resultToCopy)).toContain('🟥🟩🟩🟩🟩🟩🟩🟩🟩🟩');
+    });
+
     test('Practice game button functionality', async ({ page }) => {
         await page.goto(BASE_URL);
         

@@ -728,6 +728,7 @@
     let gameId = null;
     let fastModeAvailable = false;
     let submissionId = null;
+    let perfectScoreEmojis = null;
     const gameError = document.getElementById("game-error");
 
     async function api(path, options = {}) {
@@ -769,8 +770,9 @@
     }
 
     function getResultEmojiString() {
-      if (mm === '06' && dd === '01' && resultArray.length === 10 && resultArray.every(Boolean)) {
-        return juneFirstPerfectScorePattern;
+      if (resultArray.length === 10 && resultArray.every(Boolean)) {
+        if (gameType === 1 && perfectScoreEmojis) return perfectScoreEmojis;
+        if (mm === '06' && dd === '01') return juneFirstPerfectScorePattern;
       }
       return resultArray.map(isCorrect => isCorrect ? "🟩" : "🟥").join("");
     }
@@ -899,7 +901,7 @@
         let isFirst10 = false;
         if (!replay && firstTen) {
             resultText.textContent = `${dateStr} | ✨ Today's first 10 ✨`;
-            resultToCopy = `✨✨✨✨✨✨✨✨✨✨ | Today's First 10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
+            resultToCopy = `${perfectScoreEmojis || "✨✨✨✨✨✨✨✨✨✨"} | Today's First 10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
             isFirst10 = true;
         }
         if (totalPlayers !== 0) {
@@ -1149,6 +1151,7 @@
       currentPair = 0;
       correctCount = 0;
       gameType = 0;
+      perfectScoreEmojis = null;
       scoreboard.innerHTML = "";
       gameError.textContent = "";
       mainMenu.style.display = "none";
@@ -1161,6 +1164,8 @@
         if (game.date !== dateStr) throw new Error("The daily challenge changed. Reload the page.");
         gameId = game.id;
         if (type === 'daily') {
+          gameType = 1;
+          perfectScoreEmojis = game.perfectScoreEmojis;
           const todayCookie = getCookie(`${dateStrSanatized}`);
           if (todayCookie !== null) {
             const cookieParts = todayCookie.split("|");
@@ -1183,7 +1188,6 @@
             showResultBreakdown();
             return;
           }
-          gameType = 1;
         }
         await fetchRound(0);
         for (let i = 0; i < 10; i++) {
