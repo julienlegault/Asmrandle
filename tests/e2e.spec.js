@@ -38,6 +38,7 @@ test.describe('Asmrandle E2E Tests', () => {
         expect(await page.locator('#main-menu #fast-mode-setting').count()).toBe(0);
         const bounds = await page.locator('#fast-mode-setting').boundingBox();
         expect(bounds.y).toBeLessThan(30);
+        expect(bounds.x).toBeLessThan(30);
         await page.uncheck('#fast-mode');
         await page.click('#play-random');
         await expect(page.locator('#fast-mode-setting')).toBeVisible();

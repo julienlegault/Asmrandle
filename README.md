@@ -13,7 +13,7 @@ is inserted with **fake**, deterministic EDHRec values, and images load from
 Scryfall in the browser. Existing data is not reseeded on restart. See
 `.devcontainer/README.md` for details.
 
-Open the forwarded port to play. The **Fast Mode** switch in the top-right is available only
+Open the forwarded port to play. The **Fast Mode** switch in the top-left is available only
 when Laravel's `APP_ENV=local`; it changes the card reveal delay from 2800 ms
 to 200 ms. Production never exposes it.
 
