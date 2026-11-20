@@ -165,13 +165,8 @@
     }
     
     /* Logo size variants */
-    .logo-full {
-      content: url('images/Logo-Splash.png');
-    }
-
     .logo-play {
       width: min(350px, 100vw);
-      content: url('images/Logo-Play.png');
       margin-top: 5px;
       margin-bottom: 0px;
     }
@@ -729,6 +724,11 @@
     let fastModeAvailable = false;
     let submissionId = null;
     let perfectScoreEmojis = null;
+    let logoVariant = 'standard';
+    const logos = {
+      standard: { splash: '/images/Logo-Splash.png', play: '/images/Logo-Play.png' },
+      pride: { splash: '/images/Logo-Splash-Pride.png', play: '/images/Logo-Play-Pride.png' }
+    };
     const gameError = document.getElementById("game-error");
 
     async function api(path, options = {}) {
@@ -744,13 +744,25 @@
       return response.json();
     }
 
-    api('/config').then(config => {
-      fastModeAvailable = config.fastModeAvailable;
-      document.getElementById("fast-mode-setting").hidden = !fastModeAvailable;
-    }).catch(error => {
-      console.error(error);
-      gameError.textContent = "Could not load development settings.";
-    });
+    function setLogo(variant) {
+      if (!Object.hasOwn(logos, variant)) throw new Error(`Unknown logo: ${variant}`);
+      logoVariant = variant;
+      const logo = document.getElementById('main-logo');
+      logo.src = logos[variant][logo.classList.contains('logo-play') ? 'play' : 'splash'];
+    }
+
+    function refreshConfig() {
+      return api('/config', { cache: 'no-store' }).then(config => {
+        fastModeAvailable = config.fastModeAvailable;
+        document.getElementById("fast-mode-setting").hidden = !fastModeAvailable;
+        setLogo(config.logo);
+      }).catch(error => {
+        console.error(error);
+        gameError.textContent = "Could not load site settings.";
+      });
+    }
+
+    const configPromise = refreshConfig();
 
     // Use a UTC date offset by 6 hours so the daily challenge resets at 6:00 UTC,
     // matching when the play counters are reset.
@@ -767,6 +779,7 @@
     function switchToPlayLogo() {
       const logo = document.getElementById('main-logo');
       logo.className = 'main-logo logo-play';
+      setLogo(logoVariant);
     }
 
     function getResultEmojiString() {
@@ -837,6 +850,14 @@
         milliseconds: diffMs
       };
     }
+
+    function refreshLogoAtRollover() {
+      setTimeout(() => {
+        refreshConfig();
+        refreshLogoAtRollover();
+      }, getTimeToNextDaily().milliseconds + 100);
+    }
+    refreshLogoAtRollover();
 
     function updateCountdown() {
       if (timeToNextDaily) {
@@ -1157,11 +1178,13 @@
       mainMenu.style.display = "none";
       switchToPlayLogo();
       try {
+        await configPromise;
         const game = await api('/games', {
           method: 'POST',
           body: JSON.stringify({ mode: type === 'daily' ? 'daily' : 'practice' })
         });
         if (game.date !== dateStr) throw new Error("The daily challenge changed. Reload the page.");
+        setLogo(game.logo);
         gameId = game.id;
         if (type === 'daily') {
           gameType = 1;

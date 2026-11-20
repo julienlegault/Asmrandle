@@ -45,6 +45,7 @@ class SeededRunTest extends TestCase
             'date' => $date,
             'cards' => array_map(fn ($i) => "card-$i", range(0, 19)),
             'perfect_score_emojis' => '🟧🟨🟩🟦🟪🟪🟦🟩🟨🟧',
+            'logo' => 'pride',
         ];
     }
 
@@ -54,20 +55,30 @@ class SeededRunTest extends TestCase
         $this->post('/admin/seeded-runs', $data)->assertRedirect('/admin/login');
         $this->withSession($this->admin)->post('/admin/seeded-runs', $data)->assertRedirect('/admin')->assertSessionHasNoErrors();
         $this->withSession($this->admin)->get('/admin?edit=2026-03-16')->assertOk()
-            ->assertSee('Edit seeded run')->assertSee('card-0 / card-1');
+            ->assertSee('Edit seeded run')->assertSee('card-0 / card-1')
+            ->assertSee('<option value="pride" selected>Pride</option>', false)
+            ->assertSee('Site logo: Pride');
 
         $data['cards'][0] = 'card-20';
         $this->withSession($this->admin)->put('/admin/seeded-runs/2026-03-16', $data)->assertSessionHasNoErrors();
         $this->withSession($this->admin)->get('/admin?copy=2026-03-16')->assertOk()
-            ->assertSee('value="card-20"', false)->assertSee('value="🟧🟨🟩🟦🟪🟪🟦🟩🟨🟧"', false);
+            ->assertSee('value="card-20"', false)->assertSee('value="🟧🟨🟩🟦🟪🟪🟦🟩🟨🟧"', false)
+            ->assertSee('<option value="pride" selected>Pride</option>', false);
         $data['date'] = '2026-03-17';
         $this->withSession($this->admin)->post('/admin/seeded-runs', $data)->assertSessionHasNoErrors();
         $this->withSession($this->admin)->delete('/admin/seeded-runs/2026-03-17')->assertSessionHasNoErrors();
         $this->assertDatabaseMissing('daily_challenges', ['date' => '2026-03-17']);
 
         DB::table('cards')->where('slug', 'card-20')->update(['inclusion' => 99]);
+        Carbon::setTestNow('2026-03-16 05:59:59 UTC');
+        $this->getJson('/api/config')->assertOk()->assertJsonPath('logo', 'standard');
         Carbon::setTestNow('2026-03-16 06:00:00 UTC');
+        $this->getJson('/api/config')->assertOk()->assertJsonPath('logo', 'pride')
+            ->assertHeader('Cache-Control', 'no-store, private');
+        $this->assertNull(DB::table('daily_challenges')->where('date', '2026-03-16')->value('started_at'));
+        $this->postJson('/api/games', ['mode' => 'practice'])->assertOk()->assertJsonPath('logo', 'pride');
         $this->postJson('/api/games', ['mode' => 'daily'])->assertOk()
+            ->assertJsonPath('logo', 'pride')
             ->assertJsonPath('perfectScoreEmojis', $data['perfect_score_emojis']);
         $this->getJson('/api/games/2026-03-16/rounds/0')->assertOk()
             ->assertJsonPath('cards.0.name', 'card-20')->assertJsonPath('cards.0.popularity', 21)
@@ -78,6 +89,8 @@ class SeededRunTest extends TestCase
         $this->withSession($this->admin)->delete('/admin/seeded-runs/2026-03-16')->assertSessionHasErrors('date');
         $this->withSession($this->admin)->get('/admin?edit=2026-03-16')->assertStatus(409);
         $this->assertDatabaseHas('daily_challenges', ['date' => '2026-03-16', 'seeded' => true]);
+        Carbon::setTestNow('2026-03-17 06:00:00 UTC');
+        $this->getJson('/api/config')->assertOk()->assertJsonPath('logo', 'standard');
     }
 
     public function test_validation_rejects_bad_cards_dates_and_emoji_patterns(): void
@@ -89,8 +102,9 @@ class SeededRunTest extends TestCase
         $data['cards'][0] = 'missing';
         $data['date'] = '2026-03-14';
         $data['perfect_score_emojis'] = '😀😀😀😀😀😀😀😀😀x';
+        $data['logo'] = 'invalid';
         $this->withSession($this->admin)->post('/admin/seeded-runs', $data)
-            ->assertSessionHasErrors(['cards.0', 'date', 'perfect_score_emojis']);
+            ->assertSessionHasErrors(['cards.0', 'date', 'perfect_score_emojis', 'logo']);
         DB::table('cards')->where('slug', 'card-0')->update(['legal' => false]);
         $this->withSession($this->admin)->post('/admin/seeded-runs', $this->runData())->assertSessionHasErrors('cards.0');
         DB::table('cards')->where('slug', 'card-0')->update(['legal' => true]);
@@ -107,11 +121,13 @@ class SeededRunTest extends TestCase
         $data['perfect_score_emojis'] = null;
         $this->withSession($this->admin)->post('/admin/seeded-runs', $data)->assertSessionHasNoErrors();
         $data['date'] = '2026-03-16';
+        $data['logo'] = 'standard';
         $data['perfect_score_emojis'] = str_repeat('🇨🇦', 10);
         $this->withSession($this->admin)->put('/admin/seeded-runs/2026-03-15', $data)->assertSessionHasNoErrors();
         $this->assertDatabaseMissing('daily_challenges', ['date' => '2026-03-15']);
         Carbon::setTestNow('2026-03-16 06:00:00 UTC');
-        $this->postJson('/api/games', ['mode' => 'daily'])->assertJsonPath('perfectScoreEmojis', str_repeat('🇨🇦', 10));
+        $this->postJson('/api/games', ['mode' => 'daily'])->assertJsonPath('perfectScoreEmojis', str_repeat('🇨🇦', 10))
+            ->assertJsonPath('logo', 'standard');
     }
 
     public function test_moving_a_run_conflicts_without_losing_either_run(): void
@@ -125,9 +141,19 @@ class SeededRunTest extends TestCase
 
     public function test_started_random_challenge_cannot_be_replaced_or_deleted(): void
     {
-        $this->postJson('/api/games', ['mode' => 'daily'])->assertOk()->assertJsonPath('perfectScoreEmojis', null);
+        $this->postJson('/api/games', ['mode' => 'daily'])->assertOk()->assertJsonPath('perfectScoreEmojis', null)
+            ->assertJsonPath('logo', 'standard');
         $this->withSession($this->admin)->post('/admin/seeded-runs', $this->runData('2026-03-15'))->assertSessionHasErrors('date');
         $this->withSession($this->admin)->delete('/admin/seeded-runs/2026-03-15')->assertNotFound();
         $this->assertDatabaseHas('daily_challenges', ['date' => '2026-03-15', 'seeded' => false]);
+    }
+
+    public function test_logo_is_optional_for_existing_and_new_runs(): void
+    {
+        $data = $this->runData('2026-03-15');
+        unset($data['logo']);
+        $this->withSession($this->admin)->post('/admin/seeded-runs', $data)->assertSessionHasNoErrors();
+        $this->getJson('/api/config')->assertJsonPath('logo', 'standard');
+        $this->postJson('/api/games', ['mode' => 'daily'])->assertJsonPath('logo', 'standard');
     }
 }

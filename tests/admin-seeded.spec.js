@@ -76,6 +76,7 @@ test('organizes, saves, edits and copies seeded cards', async ({ page }) => {
 
     const date = '2099-12-30';
     await page.locator('[name="date"]').fill(date);
+    await page.getByLabel('Site logo').selectOption('pride');
     await page.locator('[name="perfect_score_emojis"]').fill('invalid');
     await page.getByRole('button', { name: 'Save seeded run' }).click();
     await expect(page.getByRole('alert')).toContainText('Enter exactly 10 emojis');
@@ -85,8 +86,10 @@ test('organizes, saves, edits and copies seeded cards', async ({ page }) => {
     await page.getByRole('button', { name: 'Save seeded run' }).click();
     const run = page.locator('details').filter({ hasText: date });
     await run.locator('summary').click();
+    await expect(run).toContainText('Site logo: Pride');
     await expect(run.locator('li').first()).toHaveText('test-card-3 / test-card-20');
     await run.getByRole('link', { name: 'Edit' }).click();
+    await expect(page.getByLabel('Site logo')).toHaveValue('pride');
     await expect(slots.nth(2).locator('input')).toHaveValue('test-card-0');
     await expect(slots.nth(2).locator('img')).toHaveAttribute('alt', 'Test card 20');
     await slots.nth(2).getByRole('button', { name: 'Remove Test card 20' }).click();
@@ -99,6 +102,7 @@ test('organizes, saves, edits and copies seeded cards', async ({ page }) => {
     await page.locator('details').filter({ hasText: date }).locator('summary').click();
     await expect(page.locator('details').filter({ hasText: date }).locator('li').first()).toHaveText('test-card-3 / test-card-20');
     await page.getByRole('link', { name: 'Copy to a new run' }).click();
+    await expect(page.getByLabel('Site logo')).toHaveValue('pride');
     await expect(page.locator('[name="date"]')).toHaveValue('');
     await expect(slots.nth(2).locator('input')).toHaveValue('test-card-0');
     await expect(page.locator('[name="perfect_score_emojis"]')).toHaveValue('🟧🟨🟩🟦🟪🟪🟦🟩🟨🟧');

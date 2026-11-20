@@ -63,7 +63,7 @@ test.describe('Asmrandle E2E Tests', () => {
     });
 
     test('Fast Mode is hidden when unavailable', async ({ page }) => {
-        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false } }));
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false, logo: 'standard' } }));
         await page.goto(BASE_URL);
         await expect(page.locator('#fast-mode-setting')).toBeHidden();
     });
@@ -92,6 +92,42 @@ test.describe('Asmrandle E2E Tests', () => {
         await expect(page.locator('#github-link img')).toBeVisible(); // Github icon
     });
 
+    test('Game-day logo is used on the menu and in practice, and updates at rollover', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-03-16T05:59:58Z') });
+        let logo = 'pride';
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false, logo } }));
+        await page.route('**/api/games', route => route.fulfill({ json: { id: 'practice', date: '2026-03-15', logo } }));
+        await page.route('**/api/games/*/rounds/*', route => route.fulfill({ json: { cards: [
+            { name: 'first', popularity: 80, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+            { name: 'second', popularity: 20, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+        ] } }));
+        await page.goto(BASE_URL);
+        const image = page.locator('#main-logo');
+        await expect(image).toHaveAttribute('src', '/images/Logo-Splash-Pride.png');
+        await page.click('#play-random');
+        await expect(image).toHaveAttribute('src', '/images/Logo-Play-Pride.png');
+        await expect(page.locator('#game')).toBeVisible();
+        logo = 'standard';
+        await page.clock.fastForward(3000);
+        await expect(image).toHaveAttribute('src', '/images/Logo-Play.png');
+    });
+
+    test('Daily game applies a logo scheduled after the page was opened', async ({ page }) => {
+        const date = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false, logo: 'standard' } }));
+        await page.route('**/api/games', route => route.fulfill({ json: { id: date, date, logo: 'pride', perfectScoreEmojis: null } }));
+        await page.route('**/api/games/*/rounds/*', route => route.fulfill({ json: { cards: [
+            { name: 'first', popularity: 80, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+            { name: 'second', popularity: 20, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+        ] } }));
+        await page.goto(BASE_URL);
+        const image = page.locator('#main-logo');
+        await expect(image).toHaveAttribute('src', '/images/Logo-Splash.png');
+        await page.click('#start-daily');
+        await expect(image).toHaveAttribute('src', '/images/Logo-Play-Pride.png');
+        await expect(page.locator('#game')).toBeVisible();
+    });
+
     test('Daily game button functionality', async ({ page }) => {
         await page.goto(BASE_URL);
         
@@ -112,7 +148,7 @@ test.describe('Asmrandle E2E Tests', () => {
     test('Custom perfect score emojis are shared for first ten and replay, but not imperfect scores', async ({ page }) => {
         const pattern = '🟧🟨🟩🟦🟪🟪🟦🟩🟨🟧';
         const date = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
-        await page.route('**/api/games', route => route.fulfill({ json: { id: date, date, perfectScoreEmojis: pattern } }));
+        await page.route('**/api/games', route => route.fulfill({ json: { id: date, date, logo: 'standard', perfectScoreEmojis: pattern } }));
         await page.route('**/api/games/*/rounds/*', route => route.fulfill({ json: { cards: [
             { name: 'first', popularity: 80, img: '/images/test.png', artImg: '/images/test.png', flavorText: '' },
             { name: 'second', popularity: 20, img: '/images/test.png', artImg: '/images/test.png', flavorText: '' },

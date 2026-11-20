@@ -6,7 +6,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('throttle:120,1')->group(function () {
-    Route::get('/config', fn () => ['fastModeAvailable' => app()->environment('local')]);
+    Route::get('/config', function (GameService $games) {
+        return response()->json([
+            'fastModeAvailable' => app()->environment('local'),
+            'logo' => $games->logoForDate($games->gameDate()),
+        ])->header('Cache-Control', 'no-store');
+    });
 
     Route::post('/games', function (Request $request, GameService $games) {
         $data = $request->validate(['mode' => 'required|in:daily,practice']);
@@ -16,10 +21,10 @@ Route::middleware('throttle:120,1')->group(function () {
 
             $emojis = DB::table('daily_challenges')->where('date', $date)->value('perfect_score_emojis');
 
-            return ['id' => $date, 'date' => $date, 'perfectScoreEmojis' => $emojis ? json_decode($emojis, true, flags: JSON_THROW_ON_ERROR) : null];
+            return ['id' => $date, 'date' => $date, 'logo' => $games->logoForDate($date), 'perfectScoreEmojis' => $emojis ? json_decode($emojis, true, flags: JSON_THROW_ON_ERROR) : null];
         }
 
-        return ['id' => $games->practice(), 'date' => $date];
+        return ['id' => $games->practice(), 'date' => $date, 'logo' => $games->logoForDate($date)];
     });
 
     Route::get('/games/{id}/rounds/{round}', function (string $id, int $round, GameService $games) {

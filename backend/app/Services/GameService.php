@@ -16,6 +16,11 @@ class GameService
         return Carbon::now('UTC')->subHours(6)->toDateString();
     }
 
+    public function logoForDate(string $date): string
+    {
+        return DB::table('daily_challenges')->where('date', $date)->value('logo') ?? 'standard';
+    }
+
     private function selectCards(?string $date = null): array
     {
         $query = DB::table('cards')

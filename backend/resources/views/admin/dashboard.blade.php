@@ -163,6 +163,13 @@
             <label>Optional perfect score: 10 emojis, without spaces
                 <input type="text" name="perfect_score_emojis" value="{{ old('perfect_score_emojis', $sourceEmojis) }}" autocomplete="off">
             </label>
+            <label>Site logo
+                <select name="logo">
+                    @foreach ($logos as $value => $label)
+                        <option value="{{ $value }}" @selected(old('logo', $source->logo ?? 'standard') === $value)>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </label>
             <div class="actions">
                 <button type="submit" id="seeded-save" disabled>{{ $editing ? 'Save changes' : 'Save seeded run' }}</button>
                 @if ($source) <a href="{{ route('admin.dashboard', absolute: false) }}">Cancel</a> @endif
@@ -185,6 +192,7 @@
                     @endforeach
                 </ol>
                 <p>Perfect score: {{ $runEmojis ?? 'Default' }}</p>
+                <p>Site logo: {{ $logos[$run->logo ?? 'standard'] }}</p>
                 <div class="actions">
                     @if ($editable)
                         <a href="{{ route('admin.dashboard', ['edit' => $run->date], absolute: false) }}#seeded-editor">Edit</a>

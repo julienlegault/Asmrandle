@@ -15,6 +15,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 class AdminController extends Controller
 {
+    private const LOGOS = ['standard' => 'Standard', 'pride' => 'Pride'];
+
     public function loginForm(): Response
     {
         return response()->view('admin.login')->header('Cache-Control', 'no-store, private');
@@ -84,6 +86,7 @@ class AdminController extends Controller
         $eligibleCards = DB::table('cards')->where('legal', true)->whereNotNull('inclusion')
             ->where('potential_decks', '>', 0)->orderBy('name')
             ->get(['slug', 'name', 'image_url', 'inclusion', 'potential_decks']);
+        $logos = self::LOGOS;
 
         foreach ($results as $result) {
             $mode = (int) $result->hard_mode;
@@ -96,7 +99,7 @@ class AdminController extends Controller
 
         return response()->view('admin.dashboard', compact(
             'date', 'totalGames', 'practiceToday', 'results', 'cards', 'counts', 'correct', 'modeTotals',
-            'seededRuns', 'source', 'sourceCards', 'sourceEmojis', 'editing', 'eligibleCards',
+            'seededRuns', 'source', 'sourceCards', 'sourceEmojis', 'editing', 'eligibleCards', 'logos',
         ));
     }
 
@@ -108,6 +111,7 @@ class AdminController extends Controller
             'cards.*' => ['required', 'string', 'distinct', Rule::exists('cards', 'slug')->where(
                 fn ($query) => $query->where('legal', true)->whereNotNull('inclusion')->where('potential_decks', '>', 0)
             )],
+            'logo' => ['nullable', Rule::in(array_keys(self::LOGOS))],
             'perfect_score_emojis' => ['nullable', 'string', 'max:512', function ($attribute, $value, $fail) {
                 $base = '(?![\p{Regional_Indicator}\x{1F3FB}-\x{1F3FF}])[\p{Extended_Pictographic}\p{Emoji_Presentation}]\x{FE0F}?[\x{1F3FB}-\x{1F3FF}]?';
                 $emoji = '(?:\p{Regional_Indicator}{2}|[0-9#*]\x{FE0F}?\x{20E3}|'.$base.'(?:\x{200D}'.$base.')*(?:[\x{E0020}-\x{E007E}]+\x{E007F})?)';
@@ -138,6 +142,7 @@ class AdminController extends Controller
             $snapshot = $games->snapshot(collect($data['cards'])->map(fn ($slug) => $cardsBySlug[$slug]));
             $values = [
                 'cards' => json_encode($snapshot, JSON_THROW_ON_ERROR),
+                'logo' => $data['logo'] ?? null,
                 'perfect_score_emojis' => isset($data['perfect_score_emojis']) ? json_encode($data['perfect_score_emojis'], JSON_THROW_ON_ERROR) : null,
                 'updated_at' => now(),
             ];

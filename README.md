@@ -65,8 +65,9 @@ percentages come from the challenge snapshot; answer percentages are based on
 completed results in each mode.
 
 Admins can schedule a seeded daily run by selecting a game date, 20 distinct
-playable cards in round order, and optionally a sequence of exactly 10 emojis
-for perfect-score shares. The dashboard lists saved seeded runs and supports
+playable cards in round order, a site logo (standard or pride), and optionally
+a sequence of exactly 10 emojis for perfect-score shares. The selected logo
+applies to the entire site for that game day, including practice mode. The dashboard lists saved seeded runs and supports
 editing, deleting, and copying them to a new date. Card statistics are
 snapshotted when saved. Add cards through the picker or fill empty slots with
 random playable cards, then drag their images to swap positions (or use the
