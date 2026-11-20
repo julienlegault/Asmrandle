@@ -32,6 +32,21 @@ until (prepare); do
   sleep 10
 done
 
+# Port 8000 is deliberately not in devcontainer.json "forwardPorts": forwarding it
+# before the server listens leaves Codespaces with a stale tunnel that returns 502.
+# It is auto-forwarded (see portsAttributes) once the server below starts listening.
+wait_until_ready() {
+  for _ in {1..60}; do
+    if curl -fs -o /dev/null http://127.0.0.1:8000/; then
+      echo "[asmrandle] Ready: http://localhost:8000"
+      return
+    fi
+    sleep 1
+  done
+  echo "[asmrandle] Server did not answer on port 8000 within 60s (log: $LOG)"
+}
+wait_until_ready &
+
 echo "[asmrandle] Serving on 0.0.0.0:8000"
 while true; do
   php backend/artisan serve --no-reload --host=0.0.0.0 --port=8000
