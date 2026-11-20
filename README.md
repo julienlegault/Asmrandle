@@ -5,11 +5,13 @@ card data and EDHRec inclusion statistics.
 
 ## Development
 
-Open the repository in a VS Code dev container or GitHub Codespace. The
-container starts MySQL, Laravel on port 8000, and a scheduler. On an empty
-database, startup downloads Scryfall oracle cards and seeds **random**, fictional
-EDHRec values. Existing data is not reimported or reseeded on restart. The
-initial download requires network access and can take several minutes.
+Open the repository in a GitHub Codespace or VS Code dev container; no manual
+steps are needed. The container starts MySQL, installs dependencies, runs
+migrations, seeds an empty database and serves Laravel on port 8000. Seeding is
+offline and takes seconds: every card in `backend/data/formatted_card_list.js`
+is inserted with **fake**, deterministic EDHRec values, and images load from
+Scryfall in the browser. Existing data is not reseeded on restart. See
+`.devcontainer/README.md` for details.
 
 Open the forwarded port to play. The **Fast Mode** switch in the top-right is available only
 when Laravel's `APP_ENV=local`; it changes the card reveal delay from 2800 ms
@@ -18,7 +20,7 @@ to 200 ms. Production never exposes it.
 ```sh
 npm test                              # Browser tests; see below
 php backend/artisan test              # Backend tests
-npm run update-cards                  # Refresh Scryfall and seed new local cards
+npm run update-cards                  # Optional: import real Scryfall cards (needs network, slow)
 ```
 
 The browser tests use the development server at `http://localhost:8000` and

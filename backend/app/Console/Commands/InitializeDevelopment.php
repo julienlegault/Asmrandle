@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use Database\Seeders\DevelopmentSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -9,7 +10,7 @@ class InitializeDevelopment extends Command
 {
     protected $signature = 'cards:initialize-development';
 
-    protected $description = 'Import cards and seed random popularity into an empty development database';
+    protected $description = 'Seed fake cards and EDHRec popularity into an empty development database';
 
     public function handle(): int
     {
@@ -24,6 +25,6 @@ class InitializeDevelopment extends Command
             return self::SUCCESS;
         }
 
-        return $this->call('cards:import', ['--seed-random' => true]);
+        return $this->call('db:seed', ['--class' => DevelopmentSeeder::class, '--force' => true]);
     }
 }
