@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Admin login - Asmrandle</title>
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicons/admin-favicon.png">
     <style>
         body { background: #171922; color: #f4f4f6; font: 16px system-ui, sans-serif; margin: 0; }
         main { max-width: 24rem; margin: 10vh auto; padding: 2rem; }

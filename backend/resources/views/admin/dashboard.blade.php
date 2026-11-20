@@ -4,11 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Admin dashboard - Asmrandle</title>
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicons/admin-favicon.png">
     <style>
         * { box-sizing: border-box; }
         body { background: #171922; color: #f4f4f6; font: 16px system-ui, sans-serif; margin: 0; }
         main { max-width: 1100px; margin: auto; padding: 1.5rem; }
         header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        header h1 { margin: 0; }
+        header h1 img { display: block; width: min(350px, 100%); height: auto; }
         button { padding: .6rem 1rem; cursor: pointer; font: inherit; }
         .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
         .stat, section { background: #242735; border-radius: .6rem; padding: 1rem; }
@@ -56,7 +59,7 @@
 <body>
 <main>
     <header>
-        <div><h1>Admin dashboard</h1><p class="muted">Game day {{ $date }} (06:00 UTC to 06:00 UTC)</p></div>
+        <div><h1><img src="/images/Logo-Play.png" alt="Admin dashboard"></h1><p class="muted">Game day {{ $date }} (06:00 UTC to 06:00 UTC)</p></div>
         <form method="post" action="{{ route('admin.logout', absolute: false) }}">@csrf<button type="submit">Log out</button></form>
     </header>
     <div class="summary">

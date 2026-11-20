@@ -61,6 +61,22 @@ class AdminTest extends TestCase
         $this->get('/admin')->assertRedirect('/admin/login');
     }
 
+    public function test_admin_pages_show_admin_branding(): void
+    {
+        $hash = Hash::make('a-long-password');
+        $id = DB::table('admin_accounts')->insertGetId([
+            'username' => 'admin', 'password' => $hash, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $favicon = '<link rel="icon" type="image/png" sizes="96x96" href="/favicons/admin-favicon.png">';
+
+        $this->get('/admin/login')->assertOk()->assertSee($favicon, false);
+        $this->withSession(['admin' => ['id' => $id, 'password_hash' => $hash]])
+            ->get('/admin')->assertOk()->assertSee($favicon, false)
+            ->assertSee('<h1><img src="/images/Logo-Play.png" alt="Admin dashboard"></h1>', false);
+        $this->get('/favicons/admin-favicon.png')->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->get('/images/Logo-Play.png')->assertOk()->assertHeader('Content-Type', 'image/png');
+    }
+
     public function test_dashboard_counts_completed_games_at_rollover_and_calculates_results(): void
     {
         Carbon::setTestNow('2026-03-16 05:59:59 UTC');
