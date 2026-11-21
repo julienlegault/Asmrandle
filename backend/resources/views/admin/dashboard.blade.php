@@ -105,9 +105,9 @@
                         <h3>Round {{ $index + 1 }}</h3>
                         <div class="images">
                             @foreach ($pair as $card)
-                                <button class="card" type="button" aria-label="{{ $card['name'] }}, EDHRec inclusion {{ number_format($card['popularity'], 1) }}%. Preview card">
+                                <button class="card" type="button" aria-label="{{ $card['name'] }}, EDHRec inclusion {{ number_format($card['popularity'], 4) }}%. Preview card">
                                     <img src="{{ $card['img'] }}" alt="" loading="lazy">
-                                    <span class="popularity" aria-hidden="true">{{ number_format($card['popularity'], 1) }}%</span>
+                                    <span class="popularity" aria-hidden="true">{{ number_format($card['popularity'], 4) }}%</span>
                                     <img class="preview" src="{{ $card['img'] }}" alt="" aria-hidden="true" loading="lazy">
                                 </button>
                             @endforeach
@@ -249,8 +249,8 @@
                 image.draggable = false;
                 const popularity = document.createElement('span');
                 popularity.className = 'popularity';
-                popularity.textContent = `${card.popularity.toFixed(1)}%`;
-                popularity.setAttribute('aria-label', `EDHRec inclusion ${card.popularity.toFixed(1)}%`);
+                popularity.textContent = `${card.popularity.toFixed(4)}%`;
+                popularity.setAttribute('aria-label', `EDHRec inclusion ${card.popularity.toFixed(4)}%`);
                 drag.append(image, popularity);
                 contents.append(drag);
             } else {

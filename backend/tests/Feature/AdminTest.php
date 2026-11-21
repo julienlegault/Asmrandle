@@ -108,7 +108,7 @@ class AdminTest extends TestCase
         ]);
         $session = ['admin' => ['id' => $id, 'password_hash' => $hash]];
         $this->withSession($session)->get('/admin')->assertOk()
-            ->assertViewHas('totalGames', 7)->assertViewHas('practiceToday', 2)
+            ->assertViewHas('totalGames', 7 + 17966)->assertViewHas('practiceToday', 2)
             ->assertViewHas('counts', [[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]])
             ->assertSee('Regular correct: 50.0%')->assertSee('Hard correct: 100.0%')
             ->assertSee('Combined correct: 66.7%')->assertSee('0.3%')

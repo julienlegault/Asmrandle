@@ -16,6 +16,7 @@ use Symfony\Component\HttpFoundation\Response;
 class AdminController extends Controller
 {
     private const LOGOS = ['standard' => 'Standard', 'pride' => 'Pride'];
+    private const COMPLETED_GAMES_OFFSET = 17966;
 
     public function loginForm(): Response
     {
@@ -63,7 +64,7 @@ class AdminController extends Controller
         $results = DB::table('game_results')->where('date', $date)->get();
         $practiceToday = DB::table('practice_plays')->where('created_at', '>=', $start)
             ->where('created_at', '<', $end)->count();
-        $totalGames = DB::table('game_results')->count() + DB::table('practice_plays')->count();
+        $totalGames = DB::table('game_results')->count() + DB::table('practice_plays')->count() + self::COMPLETED_GAMES_OFFSET;
         $challenge = DB::table('daily_challenges')->where('date', $date)->first();
         $cards = $challenge ? json_decode($challenge->cards, true, flags: JSON_THROW_ON_ERROR) : [];
         $counts = [array_fill(0, 11, 0), array_fill(0, 11, 0)];

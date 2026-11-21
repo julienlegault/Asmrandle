@@ -40,7 +40,7 @@ test('organizes, saves, edits and copies seeded cards', async ({ page }) => {
     await expect(message).toHaveText('20 of 20 cards selected.');
     await expect(slots.nth(0).locator('img')).toHaveAttribute('alt', 'Test card 20');
     await expect.poll(() => slots.nth(0).locator('img').evaluate(image => image.naturalWidth)).toBe(100);
-    await expect(slots.nth(0).locator('.popularity')).toHaveText('21.0%');
+    await expect(slots.nth(0).locator('.popularity')).toHaveText('21.0000%');
     await input.fill('Test card 20');
     await page.getByRole('button', { name: 'Add card' }).click();
     await expect(message).toHaveText('That card is already selected.');
@@ -81,7 +81,7 @@ test('organizes, saves, edits and copies seeded cards', async ({ page }) => {
     await page.getByRole('button', { name: 'Save seeded run' }).click();
     await expect(page.getByRole('alert')).toContainText('Enter exactly 10 emojis');
     await expect(slots.nth(2).locator('input')).toHaveValue('test-card-0');
-    await expect(slots.nth(2).locator('.popularity')).toHaveText('21.0%');
+    await expect(slots.nth(2).locator('.popularity')).toHaveText('21.0000%');
     await page.locator('[name="perfect_score_emojis"]').fill('🟧🟨🟩🟦🟪🟪🟦🟩🟨🟧');
     await page.getByRole('button', { name: 'Save seeded run' }).click();
     const run = page.locator('details').filter({ hasText: date });
