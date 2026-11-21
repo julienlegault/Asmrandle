@@ -111,7 +111,7 @@ class AdminTest extends TestCase
             ->assertViewHas('totalGames', 7 + 17966)->assertViewHas('practiceToday', 2)
             ->assertViewHas('counts', [[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]])
             ->assertSee('Regular correct: 50.0%')->assertSee('Hard correct: 100.0%')
-            ->assertSee('Combined correct: 66.7%')->assertSee('0.3%')
+            ->assertSee('Combined correct: 66.7%')->assertSee('0.2500%')
             ->assertDontSee('class="bar combined"')
             ->assertDontSee('<span class="combined"></span> Combined', false)
             ->assertSee('https://example.test/0.jpg');
