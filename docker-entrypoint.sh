@@ -41,6 +41,20 @@ run_db_setup() {
     else
         echo "$(date): Running database seeder..." >> "$DB_SETUP_LOG"
         php backend/artisan db:seed --class=DatabaseSeeder --force >> "$DB_SETUP_LOG" 2>&1 || true
+        
+        # Import cards from Scryfall for production
+        echo "$(date): Checking if cards need to be imported..." >> "$DB_SETUP_LOG"
+        CARD_COUNT=$(php backend/artisan tinker --execute="echo DB::table('cards')->count();" 2>/dev/null || echo "0")
+        if [ "$CARD_COUNT" = "0" ]; then
+            echo "$(date): No cards found. Importing from Scryfall..." >> "$DB_SETUP_LOG"
+            if php backend/artisan cards:import >> "$DB_SETUP_LOG" 2>&1; then
+                echo "$(date): Scryfall card import completed successfully" >> "$DB_SETUP_LOG"
+            else
+                echo "$(date): WARNING: Scryfall card import failed" >> "$DB_SETUP_LOG"
+            fi
+        else
+            echo "$(date): Cards already exist ($CARD_COUNT cards). Skipping import." >> "$DB_SETUP_LOG"
+        fi
     fi
     
     echo "$(date): Database setup process completed" >> "$DB_SETUP_LOG"
