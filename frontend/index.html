@@ -901,7 +901,18 @@
       return { ...data, questionCounts: data.questions[hardMode ? 1 : 0] };
     }
 
-    async function showCommunityResults(replay=false) {
+    async function getTodayResult() {
+      try {
+        const result = await api('/results/today');
+        return result;
+      } catch (error) {
+        // Return null if no result found (404) or other errors
+        // This will trigger fallback to cookie-based lookup
+        return null;
+      }
+    }
+
+    async function showCommunityResults() {
       const communityResults = document.getElementById("community-results");
       communityResults.innerHTML = "";
       
@@ -920,7 +931,7 @@
           totalPlayers += (counts[i] || 0) + (hardModeCounts[i] || 0);
         }
         let isFirst10 = false;
-        if (!replay && firstTen) {
+        if (firstTen) {
             resultText.textContent = `${dateStr} | ✨ Today's first 10 ✨`;
             resultToCopy = `${perfectScoreEmojis || "✨✨✨✨✨✨✨✨✨✨"} | Today's First 10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
             isFirst10 = true;
@@ -1189,10 +1200,37 @@
         if (type === 'daily') {
           gameType = 1;
           perfectScoreEmojis = game.perfectScoreEmojis;
+          
+          // Try to retrieve today's result with device-based lookup first
+          let todayResult = await getTodayResult();
+          
+          if (todayResult) {
+            // Successfully retrieved from server
+            hardMode = todayResult.hardMode;
+            firstTen = todayResult.firstTen;
+            resultArray = todayResult.answers;
+            submissionId = todayResult.submissionId;
+            await fetchAllCardData();
+            communityDataPromise = fetchCommunityData();
+            correctCount = resultArray.filter(item => item).length;
+            resultToCopy = getResultEmojiString();
+            resultToCopy += ` ${correctCount}/10`;
+            resultText.textContent = `You have already played today's Asmrandle! Your score was ${correctCount}/10.`;
+            startCountdown();
+            resultToCopy += ` ${hardMode?'| Hard Mode ':''}| ${dateStr} | https://asmrandle.com`;
+            gameArea.style.display = "none";
+            result.style.display = "block";
+            showCommunityResults();
+            showResultBreakdown();
+            return;
+          }
+          
+          // Fall back to cookie-based lookup
           const todayCookie = getCookie(`${dateStrSanatized}`);
           if (todayCookie !== null) {
             const cookieParts = todayCookie.split("|");
             hardMode = cookieParts.includes("HM");
+            firstTen = cookieParts.includes("FT");
             await fetchAllCardData();
             communityDataPromise = fetchCommunityData();
             resultArray = cookieParts[0].split(",").map(item => item === 'true');
@@ -1207,7 +1245,7 @@
             resultToCopy += ` ${hardMode?'| Hard Mode ':''}| ${dateStr} | https://asmrandle.com`;
             gameArea.style.display = "none";
             result.style.display = "block";
-            showCommunityResults(true);
+            showCommunityResults();
             showResultBreakdown();
             return;
           }
@@ -1247,7 +1285,7 @@
           firstTen = response.firstTen;
           communityDataPromise = fetchCommunityData();
           copyResultsBtn.style.display = "inline-block";
-          setCookie(`${dateStrSanatized}`, `${resultArray}|${correctCount}${hardMode?'|HM':''}`, 30); // Set cookie for 30 days
+          setCookie(`${dateStrSanatized}`, `${resultArray}|${correctCount}${hardMode?'|HM':''}${firstTen?'|FT':''}`, 30); // Set cookie for 30 days
           sessionStorage.removeItem(submissionKey);
           sessionStorage.removeItem(`submission-${dateStrSanatized}`);
           showResults();

@@ -1,11 +1,13 @@
 <?php
 
+use App\Http\Middleware\GenerateDeviceId;
 use App\Services\GameService;
+use App\Services\DeviceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('throttle:120,1')->group(function () {
+Route::middleware('throttle:120,1', GenerateDeviceId::class)->group(function () {
     Route::get('/config', function (GameService $games) {
         return response()->json([
             'fastModeAvailable' => app()->environment('local'),
@@ -60,7 +62,7 @@ Route::middleware('throttle:120,1')->group(function () {
         return ['counts' => $counts, 'hardModeCounts' => $hardCounts, 'questions' => $questions];
     });
 
-    Route::post('/results', function (Request $request, GameService $games) {
+    Route::post('/results', function (Request $request, GameService $games, DeviceService $deviceService) {
         $data = $request->validate([
             'mode' => 'required|in:daily,practice',
             'date' => 'required|date_format:Y-m-d',
@@ -76,10 +78,17 @@ Route::middleware('throttle:120,1')->group(function () {
         }
         abort_unless($data['date'] === $games->gameDate(), 409, 'The daily challenge has changed.');
 
-        return DB::transaction(function () use ($data) {
+        $deviceId = $deviceService->getDeviceId($request);
+
+        return DB::transaction(function () use ($data, $deviceId) {
             $challenge = DB::table('daily_challenges')->where('date', $data['date'])->lockForUpdate()->first();
             abort_unless($challenge, 409, 'The daily challenge has not been started.');
-            $existing = DB::table('game_results')->where('submission_id', $data['submissionId'])->first();
+            
+            $existing = DB::table('game_results')
+                ->where('submission_id', $data['submissionId'])
+                ->lockForUpdate()
+                ->first();
+            
             if ($existing) {
                 abort_unless(
                     $existing->date === $data['date']
@@ -91,11 +100,21 @@ Route::middleware('throttle:120,1')->group(function () {
 
                 return ['firstTen' => (bool) $existing->first_ten];
             }
+            
             $score = count(array_filter($data['answers']));
-            $firstTen = $score === 10 && ! DB::table('game_results')
-                ->where('date', $data['date'])->where('score', 10)->exists();
+            
+            // Lock game_results to prevent race condition on first 10 check
+            $perfectExists = DB::table('game_results')
+                ->where('date', $data['date'])
+                ->where('score', 10)
+                ->lockForUpdate()
+                ->exists();
+            
+            $firstTen = $score === 10 && !$perfectExists;
+            
             DB::table('game_results')->insert([
                 'submission_id' => $data['submissionId'],
+                'device_id' => $deviceId,
                 'date' => $data['date'],
                 'hard_mode' => $data['hardMode'],
                 'score' => $score,
@@ -106,7 +125,7 @@ Route::middleware('throttle:120,1')->group(function () {
             ]);
 
             return ['firstTen' => $firstTen];
-        });
+        }, 3);
     });
 
     Route::post('/results/{submissionId}/mark-copied', function (string $submissionId, GameService $games) {
@@ -122,5 +141,47 @@ Route::middleware('throttle:120,1')->group(function () {
             ->update(['first_ten_copied' => true]);
 
         return ['success' => true];
+    });
+
+    Route::get('/results/today', function (Request $request, GameService $games, DeviceService $deviceService) {
+        $deviceId = $deviceService->getDeviceId($request);
+
+        $result = DB::table('game_results')
+            ->where('date', $games->gameDate())
+            ->where('device_id', $deviceId)
+            ->first();
+
+        abort_unless($result, 404, 'No result found for today on this device.');
+
+        return [
+            'score' => (int) $result->score,
+            'hardMode' => (bool) $result->hard_mode,
+            'firstTen' => (bool) $result->first_ten,
+            'firstTenCopied' => (bool) $result->first_ten_copied,
+            'answers' => json_decode($result->answers, true),
+            'submissionId' => $result->submission_id,
+            'date' => $result->date,
+        ];
+    });
+
+    Route::post('/results/lookup', function (Request $request) {
+        $data = $request->validate([
+            'submissionId' => 'required|uuid',
+        ]);
+
+        $result = DB::table('game_results')
+            ->where('submission_id', $data['submissionId'])
+            ->first();
+
+        abort_unless($result, 404, 'Result not found.');
+
+        return [
+            'score' => (int) $result->score,
+            'hardMode' => (bool) $result->hard_mode,
+            'firstTen' => (bool) $result->first_ten,
+            'firstTenCopied' => (bool) $result->first_ten_copied,
+            'answers' => json_decode($result->answers, true),
+            'date' => $result->date,
+        ];
     });
 });

@@ -166,6 +166,7 @@ test.describe('Asmrandle E2E Tests', () => {
         await page.reload();
         await page.click('#start-daily');
         await expect(page.locator('#result')).toBeVisible();
+        await expect(page.locator('#result-text')).toContainText("Today's first 10");
         expect(await page.evaluate(() => resultToCopy)).toContain(pattern);
 
         await page.context().addCookies([{
