@@ -108,4 +108,19 @@ Route::middleware('throttle:120,1')->group(function () {
             return ['firstTen' => $firstTen];
         });
     });
+
+    Route::post('/results/{submissionId}/mark-copied', function (string $submissionId, GameService $games) {
+        $result = DB::table('game_results')
+            ->where('submission_id', $submissionId)
+            ->where('first_ten', true)
+            ->first();
+        
+        abort_unless($result, 404);
+
+        DB::table('game_results')
+            ->where('submission_id', $submissionId)
+            ->update(['first_ten_copied' => true]);
+
+        return ['success' => true];
+    });
 });

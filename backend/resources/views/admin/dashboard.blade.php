@@ -9,10 +9,12 @@
         * { box-sizing: border-box; }
         body { background: #171922; color: #f4f4f6; font: 16px system-ui, sans-serif; margin: 0; }
         main { max-width: 1100px; margin: auto; padding: 1.5rem; }
-        header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+        header > div:first-child { flex: 1; }
         header h1 { margin: 0; }
         header h1 img { display: block; width: min(350px, 100%); height: auto; }
         button { padding: .6rem 1rem; cursor: pointer; font: inherit; }
+        header form { flex-shrink: 0; }
         .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
         .stat, section { background: #242735; border-radius: .6rem; padding: 1rem; }
         .stat strong { display: block; font-size: 2rem; }
@@ -53,7 +55,7 @@
         .seeded-controls button { padding: .2rem .35rem; font-size: .8rem; }
         .actions { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
         a { color: #a9caff; }
-        .errors { color: #ffb4a9; }
+        .errors { color: #ffb4a9; max-width: 1100px; margin: 1.5rem auto; }
     </style>
 </head>
 <body>
@@ -66,6 +68,10 @@
         <div class="stat">Completed games, all time<strong>{{ number_format($totalGames) }}</strong></div>
         <div class="stat">Daily games today<strong>{{ number_format($results->count()) }}</strong></div>
         <div class="stat">Practice games today<strong>{{ number_format($practiceToday) }}</strong></div>
+        <div class="stat">First 10 copied today<strong>{{ $todayFirstTenCopied ? '✓' : '—' }}</strong></div>
+        <div class="stat">Days with no perfect 10s<strong>{{ $perfectScoreStats['noPerfects'] }}/{{ $perfectScoreStats['totalDays'] }} ({{ number_format($perfectScoreStats['percentage'], 1) }}%)</strong></div>
+        <div class="stat">Daily plays per day<strong>{{ number_format($dailyPlaysPerDay, 1) }}</strong></div>
+        <div class="stat">All-time average score<strong>{{ number_format($allTimeAverageScore, 2) }}</strong></div>
     </div>
     @if (session('status'))
         <p role="status">{{ session('status') }}</p>

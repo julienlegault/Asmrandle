@@ -149,4 +149,64 @@ class AdminTest extends TestCase
         $this->get('/admin')->assertOk()->assertSee('action="/admin/logout"', false);
         $this->post('/admin/logout')->assertHeader('Location', '/admin/login');
     }
+
+    public function test_dashboard_displays_new_statistics(): void
+    {
+        Carbon::setTestNow('2026-03-20 05:59:59 UTC');
+        $hash = Hash::make('a-long-password');
+        $id = DB::table('admin_accounts')->insertGetId([
+            'username' => 'admin', 'password' => $hash, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $cards = [];
+        for ($i = 0; $i < 20; $i++) {
+            $cards[] = ['name' => "card-{$i}", 'img' => "https://example.test/{$i}.jpg", 'popularity' => $i + 0.25];
+        }
+        DB::table('daily_challenges')->insert([
+            'date' => '2026-03-19', 'cards' => json_encode($cards), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        // Add game results for different days
+        // Day 1 (2026-03-19 - today): 5 games, all with perfect 10, 1 with first_ten_copied
+        for ($i = 0; $i < 5; $i++) {
+            $answers = array_fill(0, 10, true);
+            DB::table('game_results')->insert([
+                'submission_id' => (string) Str::uuid(), 'date' => '2026-03-19', 'hard_mode' => false,
+                'score' => 10, 'first_ten' => $i === 0, 'first_ten_copied' => $i === 0,
+                'answers' => json_encode($answers), 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        // Day 2 (2026-03-18 - yesterday): 3 games, none with perfect 10
+        for ($i = 0; $i < 3; $i++) {
+            $answers = array_fill(0, 10, true);
+            $answers[0] = false;
+            DB::table('game_results')->insert([
+                'submission_id' => (string) Str::uuid(), 'date' => '2026-03-18', 'hard_mode' => false,
+                'score' => 9, 'first_ten' => false, 'first_ten_copied' => false,
+                'answers' => json_encode($answers), 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $session = ['admin' => ['id' => $id, 'password_hash' => $hash]];
+        $response = $this->withSession($session)->get('/admin')->assertOk();
+
+        // Check view data
+        $response->assertViewHas('todayFirstTenCopied', true);
+        $response->assertViewHas('perfectScoreStats', [
+            'noPerfects' => 1,
+            'totalDays' => 2,
+            'percentage' => 50.0,
+        ]);
+        $response->assertViewHas('dailyPlaysPerDay', 4.0);
+        $response->assertViewHas('allTimeAverageScore', 9.625);
+
+        // Check displayed text
+        $response->assertSee('First 10 copied today');
+        $response->assertSee('Days with no perfect 10s');
+        $response->assertSee('1/2 (50.0%)');
+        $response->assertSee('Daily plays per day');
+        $response->assertSee('4.0');
+        $response->assertSee('All-time average score');
+        $response->assertSee('9.63');
+    }
 }

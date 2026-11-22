@@ -197,4 +197,38 @@ class GameApiTest extends TestCase
         $this->artisan('cards:refresh-edhrec')->assertSuccessful();
         $this->assertNotNull(DB::table('cards')->where('id', 1)->value('edhrec_checked_at'));
     }
+
+    public function test_first_ten_can_be_marked_as_copied(): void
+    {
+        $this->postJson('/api/games', ['mode' => 'daily'])->assertOk();
+        $submissionId = (string) Str::uuid();
+        $this->postJson('/api/results', [
+            'mode' => 'daily',
+            'date' => '2026-03-15',
+            'hardMode' => false,
+            'answers' => array_fill(0, 10, true),
+            'submissionId' => $submissionId,
+        ])->assertOk()->assertJsonPath('firstTen', true);
+
+        $this->assertSame(0, DB::table('game_results')->where('submission_id', $submissionId)->value('first_ten_copied'));
+
+        $this->postJson("/api/results/{$submissionId}/mark-copied")->assertOk()->assertJsonPath('success', true);
+
+        $this->assertSame(1, DB::table('game_results')->where('submission_id', $submissionId)->value('first_ten_copied'));
+    }
+
+    public function test_mark_copied_fails_if_not_first_ten(): void
+    {
+        $this->postJson('/api/games', ['mode' => 'daily'])->assertOk();
+        $submissionId = (string) Str::uuid();
+        $this->postJson('/api/results', [
+            'mode' => 'daily',
+            'date' => '2026-03-15',
+            'hardMode' => false,
+            'answers' => [true, true, true, true, true, true, true, true, true, false],
+            'submissionId' => $submissionId,
+        ])->assertOk()->assertJsonPath('firstTen', false);
+
+        $this->postJson("/api/results/{$submissionId}/mark-copied")->assertNotFound();
+    }
 }

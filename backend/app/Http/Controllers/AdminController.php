@@ -98,9 +98,21 @@ class AdminController extends Controller
             }
         }
 
+        // Calculate statistics for the top section
+        $todayFirstTenCopied = DB::table('game_results')
+            ->where('date', $date)
+            ->where('first_ten', true)
+            ->where('first_ten_copied', true)
+            ->exists();
+
+        $perfectScoreStats = $this->getPerfectScoreStats();
+        $dailyPlaysPerDay = $this->getDailyPlaysPerDayAverage();
+        $allTimeAverageScore = $this->getAllTimeAverageScore();
+
         return response()->view('admin.dashboard', compact(
             'date', 'totalGames', 'practiceToday', 'results', 'cards', 'counts', 'correct', 'modeTotals',
             'seededRuns', 'source', 'sourceCards', 'sourceEmojis', 'editing', 'eligibleCards', 'logos',
+            'todayFirstTenCopied', 'perfectScoreStats', 'dailyPlaysPerDay', 'allTimeAverageScore',
         ));
     }
 
@@ -178,4 +190,53 @@ class AdminController extends Controller
 
         return redirect()->away(route('admin.dashboard', absolute: false))->with('status', 'Seeded run deleted.');
     }
+
+    private function getPerfectScoreStats(): array
+    {
+        $stats = DB::table('game_results')
+            ->selectRaw('COUNT(DISTINCT date) as total_days')
+            ->selectRaw('COUNT(DISTINCT CASE WHEN score = 10 THEN date END) as days_with_perfects')
+            ->first();
+
+        $totalDays = (int) $stats->total_days;
+
+        if ($totalDays === 0) {
+            return ['noPerfects' => 0, 'totalDays' => 0, 'percentage' => 0];
+        }
+
+        $daysWithPerfects = (int) $stats->days_with_perfects;
+        $daysWithNoPerfects = $totalDays - $daysWithPerfects;
+        $percentage = ($daysWithNoPerfects / $totalDays) * 100;
+
+        return [
+            'noPerfects' => $daysWithNoPerfects,
+            'totalDays' => $totalDays,
+            'percentage' => $percentage,
+        ];
+    }
+
+    private function getDailyPlaysPerDayAverage(): float
+    {
+        $stats = DB::table('game_results')
+            ->selectRaw('COUNT(*) as total_plays')
+            ->selectRaw('COUNT(DISTINCT date) as total_days')
+            ->first();
+
+        $totalDays = (int) $stats->total_days;
+        $totalPlays = (int) $stats->total_plays;
+
+        if ($totalDays === 0) {
+            return 0;
+        }
+
+        return $totalPlays / $totalDays;
+    }
+
+    private function getAllTimeAverageScore(): float
+    {
+        $result = DB::table('game_results')->selectRaw('AVG(score) as average')->first();
+
+        return $result->average ?? 0;
+    }
 }
+

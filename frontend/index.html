@@ -1319,6 +1319,15 @@
 
     function copyToKeyboard() {
       navigator.clipboard.writeText(resultToCopy);
+      
+      if (firstTen && submissionId) {
+        fetch('/api/results/' + submissionId + '/mark-copied', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        }).catch(err => console.error('Failed to mark first ten as copied:', err));
+      }
     }
 
     async function handleChoice(chosen, other, div) {
