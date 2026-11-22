@@ -731,10 +731,24 @@
     };
     const gameError = document.getElementById("game-error");
 
+    function getDeviceId() {
+      try {
+        let id = localStorage.getItem('deviceId');
+        if (!id) {
+          id = crypto.randomUUID();
+          localStorage.setItem('deviceId', id);
+        }
+        return id;
+      } catch {
+        return null;
+      }
+    }
+
     async function api(path, options = {}) {
+      const deviceId = getDeviceId();
       const response = await fetch(`/api${path}`, {
         ...options,
-        headers: { "Content-Type": "application/json", ...options.headers }
+        headers: { "Content-Type": "application/json", ...(deviceId && { "X-Device-ID": deviceId }), ...options.headers }
       });
       if (!response.ok) {
         const error = new Error(`Request failed (${response.status}): ${path}`);

@@ -1,13 +1,12 @@
 <?php
 
-use App\Http\Middleware\GenerateDeviceId;
 use App\Services\GameService;
 use App\Services\DeviceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('throttle:120,1', GenerateDeviceId::class)->group(function () {
+Route::middleware('throttle:120,1')->group(function () {
     Route::get('/config', function (GameService $games) {
         return response()->json([
             'fastModeAvailable' => app()->environment('local'),
@@ -145,6 +144,7 @@ Route::middleware('throttle:120,1', GenerateDeviceId::class)->group(function () 
 
     Route::get('/results/today', function (Request $request, GameService $games, DeviceService $deviceService) {
         $deviceId = $deviceService->getDeviceId($request);
+        abort_unless($deviceId, 404, 'No device ID provided.');
 
         $result = DB::table('game_results')
             ->where('date', $games->gameDate())
