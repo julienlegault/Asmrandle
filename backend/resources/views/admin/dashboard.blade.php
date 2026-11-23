@@ -114,8 +114,7 @@
             .manage-runs-table thead { display: none; }
             .runs-sort-mobile { display: inline-block; margin-top: .5rem; }
             .manage-runs-row { padding: .5rem 0; }
-            .manage-runs-row td { display: grid; grid-template-columns: minmax(0, 7rem) minmax(0, 1fr); gap: .5rem; padding: .4rem; overflow-wrap: anywhere; }
-            .manage-runs-row td::before { content: attr(data-label); font-weight: 600; }
+            .manage-runs-row td { padding: .4rem; overflow-wrap: anywhere; }
             .run-matchups-list .matchup { flex-wrap: wrap; }
         }
         
@@ -346,8 +345,8 @@ today
                             $editable = $run->started_at === null && $run->date >= $gameDate;
                         @endphp
                         <tr class="manage-runs-row {{ !$editable ? 'is-locked' : '' }}" data-date="{{ $run->date }}">
-                            <td data-label="Date"><strong>{{ $run->date }}</strong></td>
-                            <td data-label="Matchups">
+                            <td><strong>{{ $run->date }}</strong></td>
+                            <td>
                                 <div>
                                 <button type="button" class="run-matchups-toggle" data-toggle="{{ $run->date }}" aria-expanded="false" aria-controls="matchups-{{ $run->date }}">View all matchups</button>
                                 <div class="run-matchups-list" id="matchups-{{ $run->date }}" data-matchups="{{ $run->date }}">
@@ -384,18 +383,18 @@ today
                                 </div>
                                 </div>
                             </td>
-                            <td data-label="Perfect score">
+                            <td>
                                 <span class="run-emojis">{{ $runEmojis ?? '—' }}</span>
                             </td>
-                            <td data-label="Site logo">
+                            <td>
                                 <span class="run-logo">{{ $logos[$run->logo ?? 'standard'] }}</span>
                             </td>
-                            <td data-label="Status">
+                            <td>
                                 <span class="run-status {{ !$editable ? 'locked' : '' }}">
                                     {{ $editable ? '(scheduled)' : '(locked)' }}
                                 </span>
                             </td>
-                            <td data-label="Actions">
+                            <td>
                                 <div class="run-actions">
                                     @if ($editable)
                                         <a href="{{ route('admin.dashboard', ['edit' => $run->date], absolute: false) }}#seeded-editor" title="Edit">⚙️</a>

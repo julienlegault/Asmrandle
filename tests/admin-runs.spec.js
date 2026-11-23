@@ -53,6 +53,16 @@ test('seeded runs fit on mobile, including expanded matchups', async ({ page }) 
     const scheduled = page.locator('.manage-runs-row:not(.is-locked)').first();
     expect(await locked.evaluate(row => getComputedStyle(row).backgroundColor))
         .not.toBe(await scheduled.evaluate(row => getComputedStyle(row).backgroundColor));
+    for (const row of [locked, scheduled]) {
+        expect(await row.locator('td').evaluateAll(cells => cells.map(cell => ({
+            display: getComputedStyle(cell).display,
+            label: getComputedStyle(cell, '::before').content,
+        })))).toEqual(Array(6).fill({ display: 'block', label: 'none' }));
+        await expect(row.locator('.run-emojis')).toHaveText('😀'.repeat(10));
+        await expect(row.locator('.run-logo')).toBeVisible();
+        await expect(row.locator('a[title="Copy"]')).toBeVisible();
+    }
+    await expect(scheduled.locator('a[title="Edit"]')).toBeVisible();
 
     await locked.getByRole('button', { name: 'View all matchups' }).click();
     await expect(locked.getByRole('button', { name: 'View all matchups' })).toHaveAttribute('aria-expanded', 'true');
@@ -61,6 +71,12 @@ test('seeded runs fit on mobile, including expanded matchups', async ({ page }) 
 
     await page.addStyleTag({ content: '#date-selector { min-width: 180px; }' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+
+    await page.setViewportSize({ width: 1200, height: 800 });
+    await expect(page.locator('.manage-runs-table thead')).toBeVisible();
+    await expect(page.locator('.manage-runs-table th')).toHaveText([
+        /Date/, 'Matchups', 'Perfect score', 'Site logo', 'Status', 'Actions',
+    ]);
 });
 
 test('pagination updates only seeded runs and supports browser history', async ({ page }) => {
