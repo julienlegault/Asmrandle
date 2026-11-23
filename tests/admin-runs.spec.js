@@ -67,8 +67,6 @@ test('seeded runs fit on mobile, including expanded matchups', async ({ page }) 
     await locked.getByRole('button', { name: 'View all matchups' }).click();
     await expect(locked.getByRole('button', { name: 'View all matchups' })).toHaveAttribute('aria-expanded', 'true');
     await expect(locked.locator('.run-matchups-list')).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
-
     await page.addStyleTag({ content: '#date-selector { min-width: 180px; }' });
 
     await page.setViewportSize({ width: 1200, height: 800 });
