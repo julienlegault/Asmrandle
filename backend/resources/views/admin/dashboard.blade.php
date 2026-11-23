@@ -8,18 +8,29 @@
     <style>
         * { box-sizing: border-box; }
         body { background: #171922; color: #f4f4f6; font: 16px system-ui, sans-serif; margin: 0; }
-        main { max-width: 1100px; margin: auto; padding: 1.5rem; }
-        header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+        main { max-width: 1200px; margin: auto; padding: 1.5rem; }
+        header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 2rem; }
         header > div:first-child { flex: 1; }
         header h1 { margin: 0; }
-        header h1 img { display: block; width: min(350px, 100%); height: auto; }
+        header h1 img { display: block; width: min(200px, 100%); height: auto; }
+        header h1 + p { margin: 0.5rem 0 0 0; }
         button { padding: .6rem 1rem; cursor: pointer; font: inherit; }
         header form { flex-shrink: 0; }
-        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
-        .stat, section { background: #242735; border-radius: .6rem; padding: 1rem; }
-        .stat strong { display: block; font-size: 2rem; }
-        section { margin-top: 1.5rem; }
+        .panel { background: #242735; border-radius: .6rem; padding: 1.5rem; }
+        .panel h2 { margin-top: 0; }
         .muted { color: #c3c6d1; }
+        
+        /* All-time stats panel */
+        .all-time-stats { margin-bottom: 2rem; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
+        .stat { background: #1a1d26; border-radius: .4rem; padding: 1rem; text-align: center; }
+        .stat strong { display: block; font-size: 1.8rem; margin-top: 0.5rem; }
+        .stat-label { font-size: 0.9rem; color: #c3c6d1; }
+        
+        /* Two-column layout for daily stats and schedule run */
+        .content-row { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
+        @media (max-width: 1000px) { .content-row { grid-template-columns: 1fr; } }
+        
         .chart { display: flex; height: 190px; gap: .5rem; align-items: end; border-bottom: 1px solid #aaa; }
         .bar-group { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: end; text-align: center; font-size: .75rem; }
         .bars { display: flex; justify-content: center; align-items: end; height: 145px; gap: 2px; }
@@ -56,7 +67,7 @@
         .seeded-controls button { padding: .2rem .35rem; font-size: .8rem; }
         .actions { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
         a { color: #a9caff; }
-        .errors { color: #ffb4a9; max-width: 1100px; margin: 1.5rem auto; }
+        .errors { color: #ffb4a9; max-width: 1200px; margin: 1.5rem auto; }
     </style>
 </head>
 <body>
@@ -65,15 +76,7 @@
         <div><h1><img src="/images/Logo-Play.png" alt="Admin dashboard"></h1><p class="muted">Game day {{ $date }} (06:00 UTC to 06:00 UTC)</p></div>
         <form method="post" action="{{ route('admin.logout', absolute: false) }}">@csrf<button type="submit">Log out</button></form>
     </header>
-    <div class="summary">
-        <div class="stat">Completed games, all time<strong>{{ number_format($totalGames) }}</strong></div>
-        <div class="stat">Daily games today<strong>{{ number_format($results->count()) }}</strong></div>
-        <div class="stat">Practice games today<strong>{{ number_format($practiceToday) }}</strong></div>
-        <div class="stat">First 10 copied today<strong>{{ $todayFirstTenCopied ? '✓' : '—' }}</strong></div>
-        <div class="stat">Days with no perfect 10s<strong>{{ $perfectScoreStats['noPerfects'] }}/{{ $perfectScoreStats['totalDays'] }} ({{ number_format($perfectScoreStats['percentage'], 1) }}%)</strong></div>
-        <div class="stat">Daily plays per day<strong>{{ number_format($dailyPlaysPerDay, 1) }}</strong></div>
-        <div class="stat">All-time average score<strong>{{ number_format($allTimeAverageScore, 2) }}</strong></div>
-    </div>
+    
     @if (session('status'))
         <p role="status">{{ session('status') }}</p>
     @endif
@@ -83,122 +86,162 @@
             <ul>@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
         </div>
     @endif
-    <section>
-        <h2>Daily Results</h2>
-        <p class="legend"><span class="regular"></span> Regular <span class="hard"></span> Hard</p>
-        @php
-            $maxCount = max(1, max($counts[0]), max($counts[1]));
-        @endphp
-        <div class="chart" role="img" aria-label="Daily scores: {{ collect(range(0, 10))->map(fn ($score) => $score . ': ' . $counts[0][$score] . ' regular, ' . $counts[1][$score] . ' hard')->implode('; ') }}">
-            @foreach (range(0, 10) as $score)
-                @php
-                    $regularCount = $counts[0][$score];
-                    $hardCount = $counts[1][$score];
-                    $sameValue = $regularCount === $hardCount && $regularCount > 0;
-                @endphp
-                <div class="bar-group">
-                    <div class="bars">
-                        <div class="bar regular" title="{{ $regularCount }} regular" style="height: {{ $regularCount / $maxCount * 100 }}%">
-                            @if ($sameValue)
-                                <span class="bar-label">{{ $regularCount }}</span>
-                            @elseif ($regularCount > 0)
-                                <span class="bar-label">{{ $regularCount }}</span>
-                            @endif
-                        </div>
-                        <div class="bar hard" title="{{ $hardCount }} hard" style="height: {{ $hardCount / $maxCount * 100 }}%">
-                            @if (!$sameValue && $hardCount > 0)
-                                <span class="bar-label">{{ $hardCount }}</span>
-                            @endif
-                        </div>
-                    </div>
-                    <div>{{ $score }}</div>
-                </div>
-            @endforeach
+    
+    <!-- All-time stats panel -->
+    <div class="panel all-time-stats">
+        <h2>All-time Stats</h2>
+        <div class="stats-grid">
+            <div class="stat">
+                <div class="stat-label">Completed games, all time</div>
+                <strong>{{ number_format($totalGames) }}</strong>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Days with no perfect 10s</div>
+                <strong>{{ $perfectScoreStats['noPerfects'] }}/{{ $perfectScoreStats['totalDays'] }} <span class="muted">({{ number_format($perfectScoreStats['percentage'], 1) }}%)</span></strong>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Daily plays per day</div>
+                <strong>{{ number_format($dailyPlaysPerDay, 1) }}</strong>
+            </div>
+            <div class="stat">
+                <div class="stat-label">All-time average score</div>
+                <strong>{{ number_format($allTimeAverageScore, 2) }}</strong>
+            </div>
         </div>
-    </section>
-    <section>
-        <h2>Daily run</h2>
-        @if (count($cards) === 0)
-            <p>The daily challenge has not been started yet.</p>
-        @else
-            <div class="pairs">
-                @foreach (array_chunk($cards, 2) as $index => $pair)
-                    <div class="pair">
-                        <h3>Round {{ $index + 1 }}</h3>
-                        <div class="images">
-                            @foreach ($pair as $card)
-                                <button class="card" type="button" aria-label="{{ $card['name'] }}, EDHRec inclusion {{ number_format($card['popularity'], 4) }}%. Preview card">
-                                    <img src="{{ $card['img'] }}" alt="" loading="lazy">
-                                    <span class="popularity" aria-hidden="true">{{ number_format($card['popularity'], 4) }}%</span>
-                                    <img class="preview" src="{{ $card['img'] }}" alt="" aria-hidden="true" loading="lazy">
-                                </button>
-                            @endforeach
+    </div>
+    
+    <!-- Two-column content: Daily stats and Schedule run -->
+    <div class="content-row">
+        <!-- Daily stats panel -->
+        <div class="panel daily-stats">
+            <h2>Daily Results</h2>
+            <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; font-size: 0.9rem;">
+                <div><span class="legend"><span class="regular"></span> Regular</span></div>
+                <div><span class="legend"><span class="hard"></span> Hard</span></div>
+                <div style="margin-left: auto; text-align: right;">
+                    <div>Daily games today: <strong>{{ number_format($results->count()) }}</strong></div>
+                    <div>Practice games today: <strong>{{ number_format($practiceToday) }}</strong></div>
+                    <div>First 10 copied today: <strong>{{ $todayFirstTenCopied ? '✓' : '—' }}</strong></div>
+                </div>
+            </div>
+            @php
+                $maxCount = max(1, max($counts[0]), max($counts[1]));
+            @endphp
+            <div class="chart" role="img" aria-label="Daily scores: {{ collect(range(0, 10))->map(fn ($score) => $score . ': ' . $counts[0][$score] . ' regular, ' . $counts[1][$score] . ' hard')->implode('; ') }}">
+                @foreach (range(0, 10) as $score)
+                    @php
+                        $regularCount = $counts[0][$score];
+                        $hardCount = $counts[1][$score];
+                        $sameValue = $regularCount === $hardCount && $regularCount > 0;
+                    @endphp
+                    <div class="bar-group">
+                        <div class="bars">
+                            <div class="bar regular" title="{{ $regularCount }} regular" style="height: {{ $regularCount / $maxCount * 100 }}%">
+                                @if ($sameValue)
+                                    <span class="bar-label">{{ $regularCount }}</span>
+                                @elseif ($regularCount > 0)
+                                    <span class="bar-label">{{ $regularCount }}</span>
+                                @endif
+                            </div>
+                            <div class="bar hard" title="{{ $hardCount }} hard" style="height: {{ $hardCount / $maxCount * 100 }}%">
+                                @if (!$sameValue && $hardCount > 0)
+                                    <span class="bar-label">{{ $hardCount }}</span>
+                                @endif
+                            </div>
                         </div>
-                        <div class="percentages">
-                            @foreach (['Regular', 'Hard', 'Combined'] as $mode => $label)
-                                @php
-                                    $total = $mode === 2 ? array_sum($modeTotals) : $modeTotals[$mode];
-                                    $right = $mode === 2 ? $correct[0][$index] + $correct[1][$index] : $correct[$mode][$index];
-                                    $percentage = $total ? number_format($right / $total * 100, 1).'%' : 'N/A';
-                                @endphp
-                                <span class="{{ strtolower($label) }}" aria-label="{{ $label }} correct: {{ $total ? $percentage : 'No results' }}" title="{{ $label }} correct: {{ $total ? $percentage : 'No results' }}">{{ $percentage }}</span>
-                            @endforeach
-                        </div>
+                        <div>{{ $score }}</div>
                     </div>
                 @endforeach
             </div>
-        @endif
-    </section>
-    <section id="seeded-editor">
-        <h2>{{ $editing ? 'Edit seeded run' : 'Schedule a seeded run' }}</h2>
-        <p class="muted">Game dates run from 06:00 UTC to 06:00 UTC. Choose 20 distinct playable cards. Drag cards to swap positions, or use the move buttons. Saved runs cannot be changed after they start.</p>
-        <form class="seeded-form" method="post" action="{{ $editing ? route('admin.seeded-runs.update', $source->date, absolute: false) : route('admin.seeded-runs.store', absolute: false) }}">
-            @csrf
-            @if ($editing) @method('PUT') @endif
-            <label>Game date <input type="date" name="date" min="{{ $date }}" value="{{ old('date', $editing ? $source->date : '') }}" required></label>
-            <div class="seeded-picker">
-                <label>Add a card
-                    <input id="seeded-card-input" type="text" list="playable-cards" autocomplete="off" placeholder="Search by card name">
-                </label>
-                <button type="button" id="seeded-add-card">Add card</button>
-                <button type="button" id="seeded-fill-missing">Fill missing</button>
-            </div>
-            <datalist id="playable-cards"></datalist>
-            <p id="seeded-message" role="status" aria-live="polite"></p>
-            <noscript><p class="errors">JavaScript is required to select and organize cards.</p></noscript>
-            <div class="pairs" id="seeded-pairs">
-                @foreach (range(0, 9) as $round)
-                    <div class="pair">
-                        <h3>Round {{ $round + 1 }}</h3>
-                        <div class="seeded-slots">
-                            @foreach (range(0, 1) as $side)
-                                @php $index = $round * 2 + $side; @endphp
-                                <div class="seeded-slot" data-index="{{ $index }}">
-                                    <input type="hidden" name="cards[{{ $index }}]" value="{{ old('cards.'.$index, $sourceCards[$index]['name'] ?? '') }}">
-                                    <div class="seeded-slot-contents"></div>
-                                </div>
-                            @endforeach
+            
+            <!-- Daily run section -->
+            <h3 style="margin-top: 2rem; margin-bottom: 1rem;">Daily Run</h3>
+            @if (count($cards) === 0)
+                <p>The daily challenge has not been started yet.</p>
+            @else
+                <div class="pairs">
+                    @foreach (array_chunk($cards, 2) as $index => $pair)
+                        <div class="pair">
+                            <h4 style="margin: 0 0 0.5rem 0;">Round {{ $index + 1 }}</h4>
+                            <div class="images">
+                                @foreach ($pair as $card)
+                                    <button class="card" type="button" aria-label="{{ $card['name'] }}, EDHRec inclusion {{ number_format($card['popularity'], 4) }}%. Preview card">
+                                        <img src="{{ $card['img'] }}" alt="" loading="lazy">
+                                        <span class="popularity" aria-hidden="true">{{ number_format($card['popularity'], 4) }}%</span>
+                                        <img class="preview" src="{{ $card['img'] }}" alt="" aria-hidden="true" loading="lazy">
+                                    </button>
+                                @endforeach
+                            </div>
+                            <div class="percentages">
+                                @foreach (['Regular', 'Hard', 'Combined'] as $mode => $label)
+                                    @php
+                                        $total = $mode === 2 ? array_sum($modeTotals) : $modeTotals[$mode];
+                                        $right = $mode === 2 ? $correct[0][$index] + $correct[1][$index] : $correct[$mode][$index];
+                                        $percentage = $total ? number_format($right / $total * 100, 1).'%' : 'N/A';
+                                    @endphp
+                                    <span class="{{ strtolower($label) }}" aria-label="{{ $label }} correct: {{ $total ? $percentage : 'No results' }}" title="{{ $label }} correct: {{ $total ? $percentage : 'No results' }}">{{ $percentage }}</span>
+                                @endforeach
+                            </div>
                         </div>
-                    </div>
-                @endforeach
-            </div>
-            <label>Optional perfect score: 10 emojis, without spaces
-                <input type="text" name="perfect_score_emojis" value="{{ old('perfect_score_emojis', $sourceEmojis) }}" autocomplete="off">
-            </label>
-            <label>Site logo
-                <select name="logo">
-                    @foreach ($logos as $value => $label)
-                        <option value="{{ $value }}" @selected(old('logo', $source->logo ?? 'standard') === $value)>{{ $label }}</option>
                     @endforeach
-                </select>
-            </label>
-            <div class="actions">
-                <button type="submit" id="seeded-save" disabled>{{ $editing ? 'Save changes' : 'Save seeded run' }}</button>
-                @if ($source) <a href="{{ route('admin.dashboard', absolute: false) }}">Cancel</a> @endif
-            </div>
-        </form>
-    </section>
-    <section>
+                </div>
+            @endif
+        </div>
+        
+        <!-- Schedule run panel -->
+        <div class="panel schedule-run" id="seeded-editor">
+            <h2>{{ $editing ? 'Edit seeded run' : 'Schedule a seeded run' }}</h2>
+            <p class="muted">Game dates run from 06:00 UTC to 06:00 UTC. Choose 20 distinct playable cards. Drag cards to swap positions, or use the move buttons. Saved runs cannot be changed after they start.</p>
+            <form class="seeded-form" method="post" action="{{ $editing ? route('admin.seeded-runs.update', $source->date, absolute: false) : route('admin.seeded-runs.store', absolute: false) }}">
+                @csrf
+                @if ($editing) @method('PUT') @endif
+                <label>Game date <input type="date" name="date" min="{{ $date }}" value="{{ old('date', $editing ? $source->date : '') }}" required></label>
+                <div class="seeded-picker">
+                    <label>Add a card
+                        <input id="seeded-card-input" type="text" list="playable-cards" autocomplete="off" placeholder="Search by card name">
+                    </label>
+                    <button type="button" id="seeded-add-card">Add card</button>
+                    <button type="button" id="seeded-fill-missing">Fill missing</button>
+                </div>
+                <datalist id="playable-cards"></datalist>
+                <p id="seeded-message" role="status" aria-live="polite"></p>
+                <noscript><p class="errors">JavaScript is required to select and organize cards.</p></noscript>
+                <div class="pairs" id="seeded-pairs">
+                    @foreach (range(0, 9) as $round)
+                        <div class="pair">
+                            <h3>Round {{ $round + 1 }}</h3>
+                            <div class="seeded-slots">
+                                @foreach (range(0, 1) as $side)
+                                    @php $index = $round * 2 + $side; @endphp
+                                    <div class="seeded-slot" data-index="{{ $index }}">
+                                        <input type="hidden" name="cards[{{ $index }}]" value="{{ old('cards.'.$index, $sourceCards[$index]['name'] ?? '') }}">
+                                        <div class="seeded-slot-contents"></div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+                <label>Optional perfect score: 10 emojis, without spaces
+                    <input type="text" name="perfect_score_emojis" value="{{ old('perfect_score_emojis', $sourceEmojis) }}" autocomplete="off">
+                </label>
+                <label>Site logo
+                    <select name="logo">
+                        @foreach ($logos as $value => $label)
+                            <option value="{{ $value }}" @selected(old('logo', $source->logo ?? 'standard') === $value)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <div class="actions">
+                    <button type="submit" id="seeded-save" disabled>{{ $editing ? 'Save changes' : 'Save seeded run' }}</button>
+                    @if ($source) <a href="{{ route('admin.dashboard', absolute: false) }}">Cancel</a> @endif
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Manage runs panel -->
+    <div class="panel manage-runs">
         <h2>Manage seeded runs</h2>
         @forelse ($seededRuns as $run)
             @php
@@ -229,7 +272,7 @@
         @empty
             <p>No seeded runs saved.</p>
         @endforelse
-    </section>
+    </div>
 </main>
 <script>
     const seededSlots = [...document.querySelectorAll('.seeded-slot')];
