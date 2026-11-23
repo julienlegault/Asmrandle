@@ -123,8 +123,8 @@ class AdminController extends Controller
             ->where('first_ten_copied', true)
             ->exists();
 
-        $perfectScoreStats = $this->getPerfectScoreStats($date);
-        $dailyPlaysPerDay = $this->getDailyPlaysPerDayAverage($date);
+        $perfectScoreStats = $this->getPerfectScoreStats($gameDate);
+        $dailyPlaysPerDay = $this->getDailyPlaysPerDayAverage($gameDate);
         $allTimeAverageScore = $this->getAllTimeAverageScore();
 
         return response()->view('admin.dashboard', compact(
