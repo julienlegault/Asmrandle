@@ -194,21 +194,62 @@ class AdminTest extends TestCase
         $response->assertViewHas('todayFirstTenCopied', true);
         $response->assertViewHas('perfectScoreStats', [
             'noPerfects' => 1,
-            'totalDays' => 2,
-            'percentage' => 50.0,
+            'totalDays' => 1,
+            'percentage' => 100.0,
         ]);
-        $response->assertViewHas('dailyPlaysPerDay', 4.0);
+        $response->assertViewHas('dailyPlaysPerDay', 3.0);
         $response->assertViewHas('allTimeAverageScore', 9.625);
 
         // Check displayed text
         $response->assertSee('First 10 copied today');
         $response->assertSee('Days with no perfect 10s');
         $response->assertSee('1');
-        $response->assertSee('50.0');
+        $response->assertSee('100.0');
         $response->assertSee('Daily plays per day');
-        $response->assertSee('4.0');
+        $response->assertSee('3.0');
         $response->assertSee('All-time average score');
         $response->assertSee('9.63');
+    }
+
+    public function test_all_time_day_statistics_only_include_completed_game_days(): void
+    {
+        Carbon::setTestNow('2026-03-20 05:59:59 UTC');
+        $hash = Hash::make('a-long-password');
+        $id = DB::table('admin_accounts')->insertGetId([
+            'username' => 'admin', 'password' => $hash, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $session = ['admin' => ['id' => $id, 'password_hash' => $hash]];
+
+        $insertResult = function (string $date, int $score, string $createdAt): void {
+            DB::table('game_results')->insert([
+                'submission_id' => (string) Str::uuid(), 'date' => $date, 'hard_mode' => false,
+                'score' => $score, 'first_ten' => false, 'answers' => json_encode(array_fill(0, 10, true)),
+                'created_at' => $createdAt, 'updated_at' => $createdAt,
+            ]);
+        };
+        $insertResult('2026-03-19', 9, '2026-03-19 06:00:00');
+        $insertResult('2026-03-19', 9, '2026-03-20 05:59:59');
+
+        $this->withSession($session)->get('/admin')->assertOk()
+            ->assertViewHas('perfectScoreStats', ['noPerfects' => 0, 'totalDays' => 0, 'percentage' => 0])
+            ->assertViewHas('dailyPlaysPerDay', 0.0);
+
+        $insertResult('2026-03-17', 10, '2026-03-17 12:00:00');
+        $insertResult('2026-03-17', 8, '2026-03-17 13:00:00');
+        $insertResult('2026-03-18', 10, '2026-03-19 05:59:59');
+        $insertResult('2026-03-20', 10, '2026-03-20 06:00:00');
+
+        $this->withSession($session)->get('/admin?date=2026-03-17')->assertOk()
+            ->assertViewHas('perfectScoreStats', ['noPerfects' => 0, 'totalDays' => 2, 'percentage' => 0.0])
+            ->assertViewHas('dailyPlaysPerDay', 1.5)
+            ->assertSee('0/2 <span class="muted">(0.0%)</span>', false);
+
+        Carbon::setTestNow('2026-03-20 06:00:00 UTC');
+        $this->withSession($session)->get('/admin')->assertOk()
+            ->assertViewHas('perfectScoreStats', [
+                'noPerfects' => 1, 'totalDays' => 3, 'percentage' => (1 / 3) * 100,
+            ])
+            ->assertViewHas('dailyPlaysPerDay', 5 / 3);
     }
 
     public function test_dashboard_allows_viewing_historical_dates(): void

@@ -34,8 +34,8 @@
         .chart { display: flex; height: 190px; gap: .5rem; align-items: end; border-bottom: 1px solid #aaa; }
         .bar-group { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: end; text-align: center; font-size: .75rem; }
         .bars { display: flex; justify-content: center; align-items: end; height: 145px; gap: 2px; }
-        .bar { width: 30%; max-width: 24px; min-height: 0; }
-        .bar-label { display: block; font-size: .65rem; color: #f4f4f6; font-weight: 600; padding-top: .2rem; }
+        .bar { position: relative; width: 30%; max-width: 24px; min-height: 0; }
+        .bar-label { position: absolute; bottom: calc(100% + .2rem); left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: .65rem; color: #f4f4f6; font-weight: 600; }
         .regular { color: #8bb9ff; } .hard { color: #efad72; } .combined { color: #bde89f; }
         .bar, .legend span { background: currentColor; }
         .legend span { display: inline-block; width: .8rem; height: .8rem; margin-left: .8rem; }
@@ -72,13 +72,20 @@
         /* Manage runs styling */
         .manage-runs-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
         .manage-runs-table th { text-align: left; padding: 0.75rem; background: #1a1d26; border-bottom: 2px solid #555a70; font-weight: 600; }
-        .manage-runs-table th.sortable { cursor: pointer; user-select: none; }
-        .manage-runs-table th.sortable:hover { background: #232a37; }
-        .manage-runs-table th.sortable::after { content: ' ↓'; color: #8bb9ff; margin-left: 0.5rem; }
-        .manage-runs-table th.sortable.ascending::after { content: ' ↑'; }
-        .manage-runs-row { border-bottom: 1px solid #3a3f4f; }
+        .manage-runs-table th.sortable a { color: inherit; text-decoration: none; }
+        .manage-runs-table th.sortable a:hover { text-decoration: underline; }
+        .manage-runs-row { border: 2px solid #3a3f4f; }
+        .manage-runs-row.is-locked { background: #353949; }
         .manage-runs-row td { padding: 0.75rem; vertical-align: top; }
         .manage-runs-row:hover { background: #2a2f3b; }
+        .manage-runs-row.is-locked:hover { background: #414657; }
+        .runs-content-container { position: relative; }
+        .runs-loading { position: absolute; inset: 0; background: rgba(23, 25, 34, .6); pointer-events: none; }
+        .runs-loading[hidden] { display: none; }
+        .runs-loading span { position: sticky; top: 1rem; display: block; width: max-content; max-width: 100%; margin: .75rem auto; padding: .5rem .75rem; background: #1a1d26; border-radius: .3rem; }
+        .runs-pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1rem; }
+        .runs-pagination a { text-decoration: none; }
+        .runs-sort-mobile { display: none; }
         .run-matchup { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
         .run-name { position: relative; cursor: pointer; padding: 0.3rem 0.6rem; border-radius: 0.3rem; transition: background 0.2s; }
         .run-name:hover { background: #3a3f4f; }
@@ -102,6 +109,14 @@
         .run-matchups-list.open { display: block; }
         .run-matchups-list .matchup { display: flex; gap: 0.5rem; align-items: center; margin: 0.3rem 0; }
         .run-matchups-list .run-name { margin: 0; }
+        @media (max-width: 700px) {
+            .manage-runs-table, .manage-runs-table tbody, .manage-runs-row, .manage-runs-row td { display: block; width: 100%; }
+            .manage-runs-table thead { display: none; }
+            .runs-sort-mobile { display: inline-block; margin-top: .5rem; }
+            .manage-runs-row { padding: .5rem 0; }
+            .manage-runs-row td { padding: .4rem; overflow-wrap: anywhere; }
+            .run-matchups-list .matchup { flex-wrap: wrap; }
+        }
         
         /* Top controls for schedule-run */
         .schedule-run-top { display: flex; gap: 1rem; align-items: end; flex-wrap: wrap; margin-bottom: 1.5rem; }
@@ -155,7 +170,7 @@
     <div class="content-row">
         <!-- Daily stats panel -->
         <div class="panel daily-stats">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                 <h2 style="margin: 0;">Daily Results</h2>
                 <div>
                     <label for="date-selector" style="font-size: 0.9rem; margin-right: 0.5rem;">Date:</label>
@@ -299,13 +314,22 @@ today
     </div>
     
     <!-- Manage runs panel -->
-    <div class="panel manage-runs">
+    <div class="panel manage-runs" id="manage-runs">
         <h2>Manage seeded runs</h2>
-        @if (count($seededRuns) > 0)
+        <p id="runs-load-error" class="errors" role="alert" hidden></p>
+        <div class="runs-content-container">
+        <div class="runs-content">
+        @if ($seededRuns->total() > 0)
+            @php
+                $sortRunsUrl = route('admin.dashboard', array_merge(request()->query(), ['runs_order' => $runsOrder === 'asc' ? 'desc' : 'asc', 'runs_page' => 1]), absolute: false).'#manage-runs';
+            @endphp
+            <a class="runs-sort-mobile" href="{{ $sortRunsUrl }}">Date {{ $runsOrder === 'asc' ? '↑' : '↓' }} (change sort)</a>
             <table class="manage-runs-table">
                 <thead>
                     <tr>
-                        <th class="sortable" id="sort-date">Date</th>
+                        <th class="sortable" aria-sort="{{ $runsOrder === 'asc' ? 'ascending' : 'descending' }}">
+                            <a id="sort-date" href="{{ $sortRunsUrl }}">Date {{ $runsOrder === 'asc' ? '↑' : '↓' }}</a>
+                        </th>
                         <th>Matchups</th>
                         <th>Perfect score</th>
                         <th>Site logo</th>
@@ -318,13 +342,14 @@ today
                         @php
                             $runCards = json_decode($run->cards, true, flags: JSON_THROW_ON_ERROR);
                             $runEmojis = $run->perfect_score_emojis ? json_decode($run->perfect_score_emojis, true, flags: JSON_THROW_ON_ERROR) : null;
-                            $editable = $run->started_at === null && $run->date >= $date;
+                            $editable = $run->started_at === null && $run->date >= $gameDate;
                         @endphp
-                        <tr class="manage-runs-row" data-date="{{ $run->date }}">
+                        <tr class="manage-runs-row {{ !$editable ? 'is-locked' : '' }}" data-date="{{ $run->date }}">
                             <td><strong>{{ $run->date }}</strong></td>
                             <td>
-                                <button type="button" class="run-matchups-toggle" data-toggle="{{ $run->date }}">View all matchups</button>
-                                <div class="run-matchups-list" data-matchups="{{ $run->date }}">
+                                <div>
+                                <button type="button" class="run-matchups-toggle" data-toggle="{{ $run->date }}" aria-expanded="false" aria-controls="matchups-{{ $run->date }}">View all matchups</button>
+                                <div class="run-matchups-list" id="matchups-{{ $run->date }}" data-matchups="{{ $run->date }}">
                                     @php
                                         for ($i = 0; $i < 10; $i++) {
                                             $card1Index = $i * 2;
@@ -356,6 +381,7 @@ today
                                         </div>
                                     @php } @endphp
                                 </div>
+                                </div>
                             </td>
                             <td>
                                 <span class="run-emojis">{{ $runEmojis ?? '—' }}</span>
@@ -386,9 +412,27 @@ today
                     @endforeach
                 </tbody>
             </table>
+            @if ($seededRuns->hasPages())
+                <nav class="runs-pagination" aria-label="Seeded runs pages" tabindex="-1">
+                    @if ($seededRuns->onFirstPage())
+                        <span class="muted" aria-hidden="true">←</span>
+                    @else
+                        <a href="{{ $seededRuns->previousPageUrl() }}" aria-label="Previous page">←</a>
+                    @endif
+                    <span>Page {{ $seededRuns->currentPage() }} of {{ $seededRuns->lastPage() }}</span>
+                    @if ($seededRuns->hasMorePages())
+                        <a href="{{ $seededRuns->nextPageUrl() }}" aria-label="Next page">→</a>
+                    @else
+                        <span class="muted" aria-hidden="true">→</span>
+                    @endif
+                </nav>
+            @endif
         @else
             <p>No seeded runs saved.</p>
         @endif
+        </div>
+        <div class="runs-loading" id="runs-loading" role="status" hidden><span>Loading seeded runs…</span></div>
+        </div>
     </div>
 </main>
 <script>
@@ -663,37 +707,65 @@ today
     updateCountdown();
     setInterval(updateCountdown, 1000);
 
-    // Table sorting for manage runs
-    const sortDateBtn = document.getElementById('sort-date');
-    if (sortDateBtn) {
-        let isDescending = true;
-        sortDateBtn.addEventListener('click', () => {
-            const tbody = document.getElementById('manage-runs-body');
-            const rows = Array.from(tbody.querySelectorAll('tr'));
-            
-            isDescending = !isDescending;
-            rows.sort((a, b) => {
-                const dateA = a.dataset.date;
-                const dateB = b.dataset.date;
-                return isDescending ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB);
-            });
-            
-            rows.forEach(row => tbody.appendChild(row));
-            sortDateBtn.classList.toggle('ascending', !isDescending);
-        });
+    const manageRuns = document.getElementById('manage-runs');
+    const runsLoadError = document.getElementById('runs-load-error');
+    const runsLoading = document.getElementById('runs-loading');
+    let runsRequest = null;
+    history.replaceState({ ...history.state, seededRunsPage: true }, '', location.href);
+
+    async function loadRuns(url, addHistory) {
+        runsRequest?.abort();
+        const request = new AbortController();
+        runsRequest = request;
+        runsLoadError.hidden = true;
+        runsLoading.hidden = false;
+        manageRuns.querySelector('.runs-content').setAttribute('aria-busy', 'true');
+        try {
+            const response = await fetch(url, { signal: request.signal });
+            if (!response.ok) throw new Error(`Request failed (${response.status})`);
+            const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+            const content = page.querySelector('#manage-runs .runs-content');
+            if (!content) throw new Error('Seeded runs are missing from the response');
+            if (request.signal.aborted) return;
+            manageRuns.querySelector('.runs-content').replaceWith(content);
+            if (addHistory) {
+                history.pushState({ ...history.state, seededRunsPage: true }, '', url);
+                manageRuns.querySelector('.runs-pagination')?.focus({ preventScroll: true });
+            }
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            console.error('Unable to load seeded runs:', error);
+            runsLoadError.textContent = 'Could not load seeded runs. Please try again.';
+            runsLoadError.hidden = false;
+        } finally {
+            if (runsRequest === request) {
+                runsRequest = null;
+                runsLoading.hidden = true;
+                manageRuns.querySelector('.runs-content').removeAttribute('aria-busy');
+            }
+        }
     }
 
-    // Matchups toggle functionality
-    document.querySelectorAll('.run-matchups-toggle').forEach(toggle => {
-        toggle.addEventListener('click', event => {
-            event.preventDefault();
-            const date = toggle.dataset.toggle;
-            const list = document.querySelector(`.run-matchups-list[data-matchups="${date}"]`);
-            if (list) {
-                toggle.classList.toggle('open');
-                list.classList.toggle('open');
-            }
-        });
+    manageRuns.addEventListener('click', event => {
+        const toggle = event.target.closest('.run-matchups-toggle');
+        if (toggle) {
+            const list = document.getElementById(toggle.getAttribute('aria-controls'));
+            toggle.classList.toggle('open');
+            list.classList.toggle('open');
+            toggle.setAttribute('aria-expanded', String(list.classList.contains('open')));
+            return;
+        }
+        const link = event.target.closest('.runs-pagination a, .runs-sort-mobile, #sort-date');
+        if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        loadRuns(link.href, true);
+    });
+    window.addEventListener('popstate', event => {
+        if (event.state?.seededRunsPage) {
+            loadRuns(location.href, false);
+        } else {
+            location.reload();
+        }
     });
 </script>
 </body>
