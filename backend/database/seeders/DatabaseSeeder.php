@@ -21,5 +21,11 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+
+        // Seed codespace data only in development (codespace or local/testing environments)
+        // Never seed in production
+        if (app()->environment(['local', 'testing']) || env('CODESPACES') === 'true') {
+            $this->call(CodespaceSeeder::class);
+        }
     }
 }

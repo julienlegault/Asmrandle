@@ -58,12 +58,33 @@ class AdminController extends Controller
 
     public function dashboard(Request $request, GameService $games): Response
     {
-        $date = $games->gameDate();
+        $gameDate = $games->gameDate();
+        
+        // Allow viewing historical dates via query parameter
+        $viewDate = $request->query('date');
+        if ($viewDate) {
+            try {
+                $viewDate = Carbon::createFromFormat('Y-m-d', $viewDate, 'UTC')->toDateString();
+                // Ensure viewing historical dates only (not future dates)
+                if ($viewDate > $gameDate) {
+                    $viewDate = null;
+                }
+            } catch (\Exception) {
+                $viewDate = null;
+            }
+        }
+        $date = $viewDate ?? $gameDate;
+        
         $start = Carbon::parse($date, 'UTC')->addHours(6);
         $end = $start->copy()->addDay();
         $results = DB::table('game_results')->where('date', $date)->get();
-        $practiceToday = DB::table('practice_plays')->where('created_at', '>=', $start)
-            ->where('created_at', '<', $end)->count();
+        
+        // Only count practice games for the current day
+        $practiceToday = $date === $gameDate 
+            ? DB::table('practice_plays')->where('created_at', '>=', $start)
+                ->where('created_at', '<', $end)->count()
+            : 0;
+        
         $totalGames = DB::table('game_results')->count() + DB::table('practice_plays')->count() + self::COMPLETED_GAMES_OFFSET;
         $challenge = DB::table('daily_challenges')->where('date', $date)->first();
         $cards = $challenge ? json_decode($challenge->cards, true, flags: JSON_THROW_ON_ERROR) : [];
@@ -128,7 +149,7 @@ class AdminController extends Controller
         $allTimeAverageScore = $this->getAllTimeAverageScore();
 
         return response()->view('admin.dashboard', compact(
-            'date', 'totalGames', 'practiceToday', 'results', 'cards', 'counts', 'correct', 'modeTotals',
+            'date', 'gameDate', 'totalGames', 'practiceToday', 'results', 'cards', 'counts', 'correct', 'modeTotals',
             'seededRuns', 'source', 'sourceCards', 'sourceEmojis', 'editing', 'eligibleCards', 'logos',
             'todayFirstTenCopied', 'perfectScoreStats', 'dailyPlaysPerDay', 'allTimeAverageScore', 'allCardsMap',
         ));
@@ -212,7 +233,7 @@ class AdminController extends Controller
     private function getPerfectScoreStats(string $date): array
     {
         $stats = DB::table('game_results')
-            ->where('date', '<', $date)
+            ->where('date', '<=', $date)
             ->selectRaw('COUNT(DISTINCT date) as total_days')
             ->selectRaw('COUNT(DISTINCT CASE WHEN score = 10 THEN date END) as days_with_perfects')
             ->first();
@@ -237,7 +258,7 @@ class AdminController extends Controller
     private function getDailyPlaysPerDayAverage(string $date): float
     {
         $stats = DB::table('game_results')
-            ->where('date', '<', $date)
+            ->where('date', '<=', $date)
             ->selectRaw('COUNT(*) as total_plays')
             ->selectRaw('COUNT(DISTINCT date) as total_days')
             ->first();

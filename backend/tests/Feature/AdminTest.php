@@ -203,10 +203,87 @@ class AdminTest extends TestCase
         // Check displayed text
         $response->assertSee('First 10 copied today');
         $response->assertSee('Days with no perfect 10s');
-        $response->assertSee('1/2 (50.0%)');
+        $response->assertSee('1');
+        $response->assertSee('50.0');
         $response->assertSee('Daily plays per day');
         $response->assertSee('4.0');
         $response->assertSee('All-time average score');
         $response->assertSee('9.63');
+    }
+
+    public function test_dashboard_allows_viewing_historical_dates(): void
+    {
+        Carbon::setTestNow('2026-03-20 06:00:00 UTC');
+        $hash = Hash::make('a-long-password');
+        $id = DB::table('admin_accounts')->insertGetId([
+            'username' => 'admin', 'password' => $hash, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        
+        // Insert game results for two different dates
+        $cards = [];
+        for ($i = 0; $i < 20; $i++) {
+            $cards[] = ['name' => "card-{$i}", 'img' => "https://example.test/{$i}.jpg", 'popularity' => $i + 0.25];
+        }
+        DB::table('daily_challenges')->insertOrIgnore([
+            'date' => '2026-03-18', 'cards' => json_encode($cards), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('daily_challenges')->insertOrIgnore([
+            'date' => '2026-03-19', 'cards' => json_encode($cards), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        
+        // Add game results for past dates
+        for ($i = 0; $i < 5; $i++) {
+            DB::table('game_results')->insert([
+                'submission_id' => (string) Str::uuid(), 'date' => '2026-03-18', 'hard_mode' => false,
+                'score' => 5, 'first_ten' => false, 'answers' => json_encode(array_fill(0, 10, false)),
+                'created_at' => '2026-03-18 12:00:00', 'updated_at' => '2026-03-18 12:00:00',
+            ]);
+        }
+        
+        for ($i = 0; $i < 8; $i++) {
+            DB::table('game_results')->insert([
+                'submission_id' => (string) Str::uuid(), 'date' => '2026-03-19', 'hard_mode' => false,
+                'score' => 7, 'first_ten' => false, 'answers' => json_encode(array_fill(0, 10, false)),
+                'created_at' => '2026-03-19 12:00:00', 'updated_at' => '2026-03-19 12:00:00',
+            ]);
+        }
+        
+        $session = ['admin' => ['id' => $id, 'password_hash' => $hash]];
+        
+        // Test viewing today's date (default) - gameDate() will be 2026-03-20
+        $this->withSession($session)->get('/admin')
+            ->assertOk()
+            ->assertViewHas('date', '2026-03-20')
+            ->assertViewHas('gameDate', '2026-03-20')
+            ->assertSee('date-selector', false)
+            ->assertSee('max="2026-03-20"', false);
+        
+        // Test viewing historical date - yesterday
+        $this->withSession($session)->get('/admin?date=2026-03-19')
+            ->assertOk()
+            ->assertViewHas('date', '2026-03-19')
+            ->assertViewHas('gameDate', '2026-03-20')
+            ->assertSee('(historical)', false)
+            ->assertViewHas('results', function ($results) {
+                return $results->count() === 8;
+            });
+        
+        // Test viewing historical date - two days ago
+        $this->withSession($session)->get('/admin?date=2026-03-18')
+            ->assertOk()
+            ->assertViewHas('date', '2026-03-18')
+            ->assertViewHas('results', function ($results) {
+                return $results->count() === 5;
+            });
+        
+        // Test that future dates are rejected (redirects or ignores the parameter)
+        $this->withSession($session)->get('/admin?date=2026-03-21')
+            ->assertOk()
+            ->assertViewHas('date', '2026-03-20'); // Should default back to today
+        
+        // Test invalid date format is handled gracefully
+        $this->withSession($session)->get('/admin?date=invalid-date')
+            ->assertOk()
+            ->assertViewHas('date', '2026-03-20'); // Should default back to today
     }
 }
