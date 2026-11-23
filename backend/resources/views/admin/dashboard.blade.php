@@ -24,6 +24,7 @@
         .bar-group { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: end; text-align: center; font-size: .75rem; }
         .bars { display: flex; justify-content: center; align-items: end; height: 145px; gap: 2px; }
         .bar { width: 30%; max-width: 24px; min-height: 0; }
+        .bar-label { display: block; font-size: .65rem; color: #f4f4f6; font-weight: 600; padding-top: .2rem; }
         .regular { color: #8bb9ff; } .hard { color: #efad72; } .combined { color: #bde89f; }
         .bar, .legend span { background: currentColor; }
         .legend span { display: inline-block; width: .8rem; height: .8rem; margin-left: .8rem; }
@@ -90,10 +91,25 @@
         @endphp
         <div class="chart" role="img" aria-label="Daily scores: {{ collect(range(0, 10))->map(fn ($score) => $score . ': ' . $counts[0][$score] . ' regular, ' . $counts[1][$score] . ' hard')->implode('; ') }}">
             @foreach (range(0, 10) as $score)
+                @php
+                    $regularCount = $counts[0][$score];
+                    $hardCount = $counts[1][$score];
+                    $sameValue = $regularCount === $hardCount && $regularCount > 0;
+                @endphp
                 <div class="bar-group">
                     <div class="bars">
-                        <div class="bar regular" title="{{ $counts[0][$score] }} regular" style="height: {{ $counts[0][$score] / $maxCount * 100 }}%"></div>
-                        <div class="bar hard" title="{{ $counts[1][$score] }} hard" style="height: {{ $counts[1][$score] / $maxCount * 100 }}%"></div>
+                        <div class="bar regular" title="{{ $regularCount }} regular" style="height: {{ $regularCount / $maxCount * 100 }}%">
+                            @if ($sameValue)
+                                <span class="bar-label">{{ $regularCount }}</span>
+                            @elseif ($regularCount > 0)
+                                <span class="bar-label">{{ $regularCount }}</span>
+                            @endif
+                        </div>
+                        <div class="bar hard" title="{{ $hardCount }} hard" style="height: {{ $hardCount / $maxCount * 100 }}%">
+                            @if (!$sameValue && $hardCount > 0)
+                                <span class="bar-label">{{ $hardCount }}</span>
+                            @endif
+                        </div>
                     </div>
                     <div>{{ $score }}</div>
                 </div>
