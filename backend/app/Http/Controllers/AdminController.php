@@ -91,14 +91,18 @@ class AdminController extends Controller
         $counts = [array_fill(0, 11, 0), array_fill(0, 11, 0)];
         $correct = [array_fill(0, 10, 0), array_fill(0, 10, 0)];
         $modeTotals = [0, 0];
-        $seededRuns = DB::table('daily_challenges')->where('seeded', true)->orderByDesc('date')->get();
+        $runsOrder = $request->query('runs_order') === 'asc' ? 'asc' : 'desc';
+        $seededRuns = DB::table('daily_challenges')->where('seeded', true)
+            ->orderBy('date', $runsOrder)->paginate(10, ['*'], 'runs_page')
+            ->withPath(route('admin.dashboard', absolute: false))->withQueryString()->fragment('manage-runs');
         $source = null;
         $editing = false;
         if ($request->filled('edit') || $request->filled('copy')) {
             $editing = $request->filled('edit');
-            $source = $seededRuns->firstWhere('date', $request->query($editing ? 'edit' : 'copy'));
+            $source = DB::table('daily_challenges')->where('seeded', true)
+                ->where('date', $request->query($editing ? 'edit' : 'copy'))->first();
             abort_unless($source, 404);
-            if ($editing && ($source->started_at !== null || $source->date < $date)) {
+            if ($editing && ($source->started_at !== null || $source->date < $gameDate)) {
                 abort(409, 'This run has already started or its date has passed.');
             }
         }
@@ -110,23 +114,7 @@ class AdminController extends Controller
             ->get(['slug', 'name', 'image_url', 'inclusion', 'potential_decks']);
         $logos = self::LOGOS;
 
-        // Build seeded runs data with card display names
         $allCardsMap = DB::table('cards')->get()->keyBy('slug');
-        $seededRunsData = [];
-        foreach ($seededRuns as $run) {
-            $runCards = json_decode($run->cards, true, flags: JSON_THROW_ON_ERROR);
-            $cardsWithNames = [];
-            foreach ($runCards as $card) {
-                $slug = $card['name'];
-                $cardData = $allCardsMap->get($slug);
-                $cardsWithNames[] = [
-                    'slug' => $slug,
-                    'name' => $cardData?->name ?? $slug,
-                    'image_url' => $cardData?->image_url ?? null,
-                ];
-            }
-            $seededRunsData[$run->date] = $cardsWithNames;
-        }
 
         foreach ($results as $result) {
             $mode = (int) $result->hard_mode;
@@ -150,7 +138,7 @@ class AdminController extends Controller
 
         return response()->view('admin.dashboard', compact(
             'date', 'gameDate', 'totalGames', 'practiceToday', 'results', 'cards', 'counts', 'correct', 'modeTotals',
-            'seededRuns', 'source', 'sourceCards', 'sourceEmojis', 'editing', 'eligibleCards', 'logos',
+            'seededRuns', 'runsOrder', 'source', 'sourceCards', 'sourceEmojis', 'editing', 'eligibleCards', 'logos',
             'todayFirstTenCopied', 'perfectScoreStats', 'dailyPlaysPerDay', 'allTimeAverageScore', 'allCardsMap',
         ));
     }
@@ -233,7 +221,7 @@ class AdminController extends Controller
     private function getPerfectScoreStats(string $date): array
     {
         $stats = DB::table('game_results')
-            ->where('date', '<=', $date)
+            ->where('date', '<', $date)
             ->selectRaw('COUNT(DISTINCT date) as total_days')
             ->selectRaw('COUNT(DISTINCT CASE WHEN score = 10 THEN date END) as days_with_perfects')
             ->first();
@@ -258,7 +246,7 @@ class AdminController extends Controller
     private function getDailyPlaysPerDayAverage(string $date): float
     {
         $stats = DB::table('game_results')
-            ->where('date', '<=', $date)
+            ->where('date', '<', $date)
             ->selectRaw('COUNT(*) as total_plays')
             ->selectRaw('COUNT(DISTINCT date) as total_days')
             ->first();

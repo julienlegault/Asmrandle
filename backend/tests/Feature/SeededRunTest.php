@@ -93,6 +93,47 @@ class SeededRunTest extends TestCase
         $this->getJson('/api/config')->assertOk()->assertJsonPath('logo', 'standard');
     }
 
+    public function test_manage_runs_paginates_sorts_and_locks_against_current_game_date(): void
+    {
+        $cards = array_map(fn ($i) => [
+            'name' => "card-$i", 'img' => "https://example.test/$i.jpg", 'popularity' => $i,
+        ], range(0, 19));
+        foreach (range(10, 22) as $day) {
+            DB::table('daily_challenges')->insert([
+                'date' => "2026-03-$day", 'cards' => json_encode($cards), 'seeded' => true,
+                'started_at' => $day === 15 ? now() : null, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $this->withSession($this->admin)->get('/admin?date=2026-03-10')->assertOk()
+            ->assertViewHas('seededRuns', fn ($runs) => $runs->total() === 13 && $runs->count() === 10
+                && $runs->first()->date === '2026-03-22' && $runs->last()->date === '2026-03-13')
+            ->assertSee('class="manage-runs-row is-locked" data-date="2026-03-13"', false)
+            ->assertSee('class="manage-runs-row is-locked" data-date="2026-03-15"', false)
+            ->assertSee('class="manage-runs-row " data-date="2026-03-16"', false)
+            ->assertSee('Page 1 of 2')
+            ->assertSee('date=2026-03-10&amp;runs_page=2#manage-runs', false);
+
+        $this->withSession($this->admin)->get('/admin?date=2026-03-10&runs_page=2')->assertOk()
+            ->assertViewHas('seededRuns', fn ($runs) => $runs->count() === 3
+                && $runs->first()->date === '2026-03-12' && $runs->last()->date === '2026-03-10')
+            ->assertSee('Page 2 of 2');
+
+        $this->withSession($this->admin)->get('/admin?date=2026-03-10&runs_order=asc')->assertOk()
+            ->assertViewHas('seededRuns', fn ($runs) => $runs->first()->date === '2026-03-10'
+                && $runs->last()->date === '2026-03-19')
+            ->assertSee('runs_order=asc&amp;runs_page=2#manage-runs', false);
+        $this->withSession($this->admin)->get('/admin?runs_order=asc&runs_page=2')->assertOk()
+            ->assertViewHas('seededRuns', fn ($runs) => $runs->first()->date === '2026-03-20'
+                && $runs->last()->date === '2026-03-22');
+
+        $this->withSession($this->admin)->get('/admin?copy=2026-03-10')->assertOk()
+            ->assertViewHas('source', fn ($source) => $source->date === '2026-03-10');
+        $this->withSession($this->admin)->get('/admin?date=2026-03-10&edit=2026-03-12')->assertStatus(409);
+        $this->withSession($this->admin)->get('/admin?runs_order=asc&edit=2026-03-22')->assertOk()
+            ->assertViewHas('source', fn ($source) => $source->date === '2026-03-22');
+    }
+
     public function test_validation_rejects_bad_cards_dates_and_emoji_patterns(): void
     {
         $data = $this->runData();
