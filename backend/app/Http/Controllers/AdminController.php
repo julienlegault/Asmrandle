@@ -89,6 +89,24 @@ class AdminController extends Controller
             ->get(['slug', 'name', 'image_url', 'inclusion', 'potential_decks']);
         $logos = self::LOGOS;
 
+        // Build seeded runs data with card display names
+        $allCardsMap = DB::table('cards')->get()->keyBy('slug');
+        $seededRunsData = [];
+        foreach ($seededRuns as $run) {
+            $runCards = json_decode($run->cards, true, flags: JSON_THROW_ON_ERROR);
+            $cardsWithNames = [];
+            foreach ($runCards as $card) {
+                $slug = $card['name'];
+                $cardData = $allCardsMap->get($slug);
+                $cardsWithNames[] = [
+                    'slug' => $slug,
+                    'name' => $cardData?->name ?? $slug,
+                    'image_url' => $cardData?->image_url ?? null,
+                ];
+            }
+            $seededRunsData[$run->date] = $cardsWithNames;
+        }
+
         foreach ($results as $result) {
             $mode = (int) $result->hard_mode;
             $modeTotals[$mode]++;
@@ -112,7 +130,7 @@ class AdminController extends Controller
         return response()->view('admin.dashboard', compact(
             'date', 'totalGames', 'practiceToday', 'results', 'cards', 'counts', 'correct', 'modeTotals',
             'seededRuns', 'source', 'sourceCards', 'sourceEmojis', 'editing', 'eligibleCards', 'logos',
-            'todayFirstTenCopied', 'perfectScoreStats', 'dailyPlaysPerDay', 'allTimeAverageScore',
+            'todayFirstTenCopied', 'perfectScoreStats', 'dailyPlaysPerDay', 'allTimeAverageScore', 'allCardsMap',
         ));
     }
 

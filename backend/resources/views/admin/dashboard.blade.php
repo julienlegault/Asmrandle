@@ -68,12 +68,52 @@
         .actions { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
         a { color: #a9caff; }
         .errors { color: #ffb4a9; max-width: 1200px; margin: 1.5rem auto; }
+        
+        /* Manage runs styling */
+        .manage-runs-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        .manage-runs-table th { text-align: left; padding: 0.75rem; background: #1a1d26; border-bottom: 2px solid #555a70; font-weight: 600; }
+        .manage-runs-table th.sortable { cursor: pointer; user-select: none; }
+        .manage-runs-table th.sortable:hover { background: #232a37; }
+        .manage-runs-table th.sortable::after { content: ' ↓'; color: #8bb9ff; margin-left: 0.5rem; }
+        .manage-runs-table th.sortable.ascending::after { content: ' ↑'; }
+        .manage-runs-row { border-bottom: 1px solid #3a3f4f; }
+        .manage-runs-row td { padding: 0.75rem; vertical-align: top; }
+        .manage-runs-row:hover { background: #2a2f3b; }
+        .run-matchup { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+        .run-name { position: relative; cursor: pointer; padding: 0.3rem 0.6rem; border-radius: 0.3rem; transition: background 0.2s; }
+        .run-name:hover { background: #3a3f4f; }
+        .run-name .preview { display: none; position: fixed; z-index: 10; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(320px, 75vw); max-height: 85vh; object-fit: contain; border-radius: .6rem; box-shadow: 0 0 0 100vmax rgba(0,0,0,.65); pointer-events: none; }
+        .run-name:hover .preview { display: block; }
+        .run-info { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; font-size: 0.9rem; }
+        .run-info span { display: flex; align-items: center; gap: 0.3rem; }
+        .run-emojis { font-size: 1rem; }
+        .run-logo { background: #1a1d26; padding: 0.3rem 0.6rem; border-radius: 0.3rem; font-size: 0.85rem; }
+        .run-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .run-actions a, .run-actions button { padding: 0.4rem 0.5rem; font-size: 1rem; background: none; border: none; color: #a9caff; cursor: pointer; border-radius: 0.3rem; transition: background 0.2s; text-decoration: none; }
+        .run-actions a:hover, .run-actions button:hover { background: #3a3f4f; }
+        .run-actions button { padding: 0.4rem 0.5rem; }
+        .run-status { font-size: 0.85rem; color: #c3c6d1; }
+        .run-status.locked { color: #ffb4a9; }
+        .run-matchups-toggle { background: none; border: none; color: #a9caff; cursor: pointer; padding: 0.3rem 0.6rem; border-radius: 0.3rem; transition: background 0.2s; font-weight: 600; }
+        .run-matchups-toggle:hover { background: #3a3f4f; }
+        .run-matchups-toggle::before { content: '▶ '; display: inline-block; transition: transform 0.2s; }
+        .run-matchups-toggle.open::before { transform: rotate(90deg); }
+        .run-matchups-list { display: none; margin-top: 0.5rem; }
+        .run-matchups-list.open { display: block; }
+        .run-matchups-list .matchup { display: flex; gap: 0.5rem; align-items: center; margin: 0.3rem 0; }
+        .run-matchups-list .run-name { margin: 0; }
+        
+        /* Top controls for schedule-run */
+        .schedule-run-top { display: flex; gap: 1rem; align-items: end; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .schedule-run-top label { flex: 1 1 10rem; }
+        .schedule-run-top input, .schedule-run-top select { width: 100%; }
+
     </style>
 </head>
 <body>
 <main>
     <header>
-        <div><h1><img src="/images/Logo-Play.png" alt="Admin dashboard"></h1><p class="muted">Game day {{ $date }} (06:00 UTC to 06:00 UTC)</p></div>
+        <div><h1><img src="/images/Logo-Play.png" alt="Admin dashboard"></h1><p class="muted">Game day <span id="current-date">{{ $date }}</span> <span id="countdown-timer"></span></p></div>
         <form method="post" action="{{ route('admin.logout', absolute: false) }}">@csrf<button type="submit">Log out</button></form>
     </header>
     
@@ -191,11 +231,22 @@
         <!-- Schedule run panel -->
         <div class="panel schedule-run" id="seeded-editor">
             <h2>{{ $editing ? 'Edit seeded run' : 'Schedule a seeded run' }}</h2>
-            <p class="muted">Game dates run from 06:00 UTC to 06:00 UTC. Choose 20 distinct playable cards. Drag cards to swap positions, or use the move buttons. Saved runs cannot be changed after they start.</p>
             <form class="seeded-form" method="post" action="{{ $editing ? route('admin.seeded-runs.update', $source->date, absolute: false) : route('admin.seeded-runs.store', absolute: false) }}">
                 @csrf
                 @if ($editing) @method('PUT') @endif
-                <label>Game date <input type="date" name="date" min="{{ $date }}" value="{{ old('date', $editing ? $source->date : '') }}" required></label>
+                <div class="schedule-run-top">
+                    <label>Game date <input type="date" name="date" min="{{ $date }}" value="{{ old('date', $editing ? $source->date : '') }}" required></label>
+                    <label>Perfect score (10 emojis)
+                        <input type="text" name="perfect_score_emojis" value="{{ old('perfect_score_emojis', $sourceEmojis) }}" autocomplete="off" placeholder="Leave blank for default">
+                    </label>
+                    <label>Site logo
+                        <select name="logo">
+                            @foreach ($logos as $value => $label)
+                                <option value="{{ $value }}" @selected(old('logo', $source->logo ?? 'standard') === $value)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                </div>
                 <div class="seeded-picker">
                     <label>Add a card
                         <input id="seeded-card-input" type="text" list="playable-cards" autocomplete="off" placeholder="Search by card name">
@@ -222,16 +273,6 @@
                         </div>
                     @endforeach
                 </div>
-                <label>Optional perfect score: 10 emojis, without spaces
-                    <input type="text" name="perfect_score_emojis" value="{{ old('perfect_score_emojis', $sourceEmojis) }}" autocomplete="off">
-                </label>
-                <label>Site logo
-                    <select name="logo">
-                        @foreach ($logos as $value => $label)
-                            <option value="{{ $value }}" @selected(old('logo', $source->logo ?? 'standard') === $value)>{{ $label }}</option>
-                        @endforeach
-                    </select>
-                </label>
                 <div class="actions">
                     <button type="submit" id="seeded-save" disabled>{{ $editing ? 'Save changes' : 'Save seeded run' }}</button>
                     @if ($source) <a href="{{ route('admin.dashboard', absolute: false) }}">Cancel</a> @endif
@@ -243,35 +284,94 @@
     <!-- Manage runs panel -->
     <div class="panel manage-runs">
         <h2>Manage seeded runs</h2>
-        @forelse ($seededRuns as $run)
-            @php
-                $runCards = json_decode($run->cards, true, flags: JSON_THROW_ON_ERROR);
-                $runEmojis = $run->perfect_score_emojis ? json_decode($run->perfect_score_emojis, true, flags: JSON_THROW_ON_ERROR) : null;
-                $editable = $run->started_at === null && $run->date >= $date;
-            @endphp
-            <details>
-                <summary>{{ $run->date }}{{ $editable ? ' (scheduled)' : ' (locked)' }}</summary>
-                <ol>
-                    @foreach (array_chunk($runCards, 2) as $pair)
-                        <li>{{ $pair[0]['name'] }} / {{ $pair[1]['name'] }}</li>
+        @if (count($seededRuns) > 0)
+            <table class="manage-runs-table">
+                <thead>
+                    <tr>
+                        <th class="sortable" id="sort-date">Date</th>
+                        <th>Matchups</th>
+                        <th>Perfect score</th>
+                        <th>Site logo</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="manage-runs-body">
+                    @foreach ($seededRuns as $run)
+                        @php
+                            $runCards = json_decode($run->cards, true, flags: JSON_THROW_ON_ERROR);
+                            $runEmojis = $run->perfect_score_emojis ? json_decode($run->perfect_score_emojis, true, flags: JSON_THROW_ON_ERROR) : null;
+                            $editable = $run->started_at === null && $run->date >= $date;
+                        @endphp
+                        <tr class="manage-runs-row" data-date="{{ $run->date }}">
+                            <td><strong>{{ $run->date }}</strong></td>
+                            <td>
+                                <button type="button" class="run-matchups-toggle" data-toggle="{{ $run->date }}">View all matchups</button>
+                                <div class="run-matchups-list" data-matchups="{{ $run->date }}">
+                                    @php
+                                        for ($i = 0; $i < 10; $i++) {
+                                            $card1Index = $i * 2;
+                                            $card2Index = $i * 2 + 1;
+                                            $card1Slug = $runCards[$card1Index]['name'];
+                                            $card2Slug = $runCards[$card2Index]['name'];
+                                            $card1Data = $allCardsMap->get($card1Slug);
+                                            $card2Data = $allCardsMap->get($card2Slug);
+                                            $card1Name = $card1Data?->name ?? $card1Slug;
+                                            $card2Name = $card2Data?->name ?? $card2Slug;
+                                            $card1Image = $card1Data?->image_url;
+                                            $card2Image = $card2Data?->image_url;
+                                    @endphp
+                                        <div class="matchup">
+                                            <strong>R{{ $i + 1 }}:</strong>
+                                            <div class="run-name">
+                                                {{ $card1Name }}
+                                                @if ($card1Image)
+                                                    <img class="preview" src="{{ $card1Image }}" alt="{{ $card1Name }}" loading="lazy">
+                                                @endif
+                                            </div>
+                                            <span>vs</span>
+                                            <div class="run-name">
+                                                {{ $card2Name }}
+                                                @if ($card2Image)
+                                                    <img class="preview" src="{{ $card2Image }}" alt="{{ $card2Name }}" loading="lazy">
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @php } @endphp
+                                </div>
+                            </td>
+                            <td>
+                                <span class="run-emojis">{{ $runEmojis ?? '—' }}</span>
+                            </td>
+                            <td>
+                                <span class="run-logo">{{ $logos[$run->logo ?? 'standard'] }}</span>
+                            </td>
+                            <td>
+                                <span class="run-status {{ !$editable ? 'locked' : '' }}">
+                                    {{ $editable ? '(scheduled)' : '(locked)' }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="run-actions">
+                                    @if ($editable)
+                                        <a href="{{ route('admin.dashboard', ['edit' => $run->date], absolute: false) }}#seeded-editor" title="Edit">⚙️</a>
+                                    @endif
+                                    <a href="{{ route('admin.dashboard', ['copy' => $run->date], absolute: false) }}#seeded-editor" title="Copy">📋</a>
+                                    @if ($editable)
+                                        <form method="post" action="{{ route('admin.seeded-runs.delete', $run->date, absolute: false) }}" style="display: inline;" onsubmit="return confirm('Delete this seeded run?')">
+                                            @csrf @method('DELETE')
+                                            <button type="submit" title="Delete">🗑️</button>
+                                        </form>
+                                    @endif
+                                </div>
+                            </td>
+                        </tr>
                     @endforeach
-                </ol>
-                <p>Perfect score: {{ $runEmojis ?? 'Default' }}</p>
-                <p>Site logo: {{ $logos[$run->logo ?? 'standard'] }}</p>
-                <div class="actions">
-                    @if ($editable)
-                        <a href="{{ route('admin.dashboard', ['edit' => $run->date], absolute: false) }}#seeded-editor">Edit</a>
-                        <form method="post" action="{{ route('admin.seeded-runs.delete', $run->date, absolute: false) }}" onsubmit="return confirm('Delete this seeded run?')">
-                            @csrf @method('DELETE')
-                            <button type="submit">Delete</button>
-                        </form>
-                    @endif
-                    <a href="{{ route('admin.dashboard', ['copy' => $run->date], absolute: false) }}#seeded-editor">Copy to a new run</a>
-                </div>
-            </details>
-        @empty
+                </tbody>
+            </table>
+        @else
             <p>No seeded runs saved.</p>
-        @endforelse
+        @endif
     </div>
 </main>
 <script>
@@ -507,6 +607,60 @@
         card.addEventListener('pointercancel', cancel);
         card.addEventListener('lostpointercapture', cancel);
         card.addEventListener('contextmenu', event => event.preventDefault());
+    });
+
+    // Countdown timer for game day
+    function updateCountdown() {
+        const now = new Date();
+        const currentDateStr = document.getElementById('current-date').textContent.trim();
+        const nextDay = new Date(currentDateStr);
+        nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+        nextDay.setUTCHours(6, 0, 0, 0);
+
+        const diff = nextDay - now;
+        if (diff > 0) {
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+            document.getElementById('countdown-timer').textContent = `(${hours}h ${minutes}m ${seconds}s until next)`;
+        } else {
+            document.getElementById('countdown-timer').textContent = '';
+        }
+    }
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
+
+    // Table sorting for manage runs
+    const sortDateBtn = document.getElementById('sort-date');
+    if (sortDateBtn) {
+        let isDescending = true;
+        sortDateBtn.addEventListener('click', () => {
+            const tbody = document.getElementById('manage-runs-body');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            isDescending = !isDescending;
+            rows.sort((a, b) => {
+                const dateA = a.dataset.date;
+                const dateB = b.dataset.date;
+                return isDescending ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB);
+            });
+            
+            rows.forEach(row => tbody.appendChild(row));
+            sortDateBtn.classList.toggle('ascending', !isDescending);
+        });
+    }
+
+    // Matchups toggle functionality
+    document.querySelectorAll('.run-matchups-toggle').forEach(toggle => {
+        toggle.addEventListener('click', event => {
+            event.preventDefault();
+            const date = toggle.dataset.toggle;
+            const list = document.querySelector(`.run-matchups-list[data-matchups="${date}"]`);
+            if (list) {
+                toggle.classList.toggle('open');
+                list.classList.toggle('open');
+            }
+        });
     });
 </script>
 </body>
