@@ -48,7 +48,7 @@ test('seeded runs fit on mobile, including expanded matchups', async ({ page }) 
     const next = page.getByRole('link', { name: 'Next page' });
     await expect(next).toHaveText('→');
     await expect(next).toHaveCSS('text-decoration-line', 'none');
-    await expect(rows.first()).toHaveCSS('border-bottom-width', '5px');
+    await expect(rows.first()).toHaveCSS('border-bottom-width', '2px');
     const locked = page.locator('.manage-runs-row.is-locked').first();
     const scheduled = page.locator('.manage-runs-row:not(.is-locked)').first();
     expect(await locked.evaluate(row => getComputedStyle(row).backgroundColor))
