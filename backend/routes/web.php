@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', fn () => response()->file(base_path('../frontend/index.html')));
 
 Route::get('/admin/login', [AdminController::class, 'loginForm'])->name('admin.login');
-Route::post('/admin/login', [AdminController::class, 'login'])->middleware('throttle:5,1');
+Route::post('/admin/login', [AdminController::class, 'login'])->middleware('throttle:20,1');
 Route::middleware(AuthenticateAdmin::class)->group(function () {
     Route::get('/admin', [AdminController::class, 'dashboard'])->name('admin.dashboard');
     Route::post('/admin/logout', [AdminController::class, 'logout'])->name('admin.logout');
