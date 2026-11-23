@@ -105,8 +105,8 @@ class AdminController extends Controller
             ->where('first_ten_copied', true)
             ->exists();
 
-        $perfectScoreStats = $this->getPerfectScoreStats();
-        $dailyPlaysPerDay = $this->getDailyPlaysPerDayAverage();
+        $perfectScoreStats = $this->getPerfectScoreStats($date);
+        $dailyPlaysPerDay = $this->getDailyPlaysPerDayAverage($date);
         $allTimeAverageScore = $this->getAllTimeAverageScore();
 
         return response()->view('admin.dashboard', compact(
@@ -191,9 +191,10 @@ class AdminController extends Controller
         return redirect()->away(route('admin.dashboard', absolute: false))->with('status', 'Seeded run deleted.');
     }
 
-    private function getPerfectScoreStats(): array
+    private function getPerfectScoreStats(string $date): array
     {
         $stats = DB::table('game_results')
+            ->where('date', '<', $date)
             ->selectRaw('COUNT(DISTINCT date) as total_days')
             ->selectRaw('COUNT(DISTINCT CASE WHEN score = 10 THEN date END) as days_with_perfects')
             ->first();
@@ -215,9 +216,10 @@ class AdminController extends Controller
         ];
     }
 
-    private function getDailyPlaysPerDayAverage(): float
+    private function getDailyPlaysPerDayAverage(string $date): float
     {
         $stats = DB::table('game_results')
+            ->where('date', '<', $date)
             ->selectRaw('COUNT(*) as total_plays')
             ->selectRaw('COUNT(DISTINCT date) as total_days')
             ->first();
