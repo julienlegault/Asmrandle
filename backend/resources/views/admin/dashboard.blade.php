@@ -113,7 +113,8 @@
 <body>
 <main>
     <header>
-        <div><h1><img src="/images/Logo-Play.png" alt="Admin dashboard"></h1><p class="muted">Game day <span id="current-date">{{ $date }}</span> <span id="countdown-timer"></span></p></div>
+        <div><h1><img src="/images/Logo-Play.png" alt="Admin dashboard"></h1><p class="muted">Game day <span id="current-date">{{ $date }}</span>@if ($date !== $gameDate)
+ <span style="color: #efad72;">(historical)</span>@endif <span id="countdown-timer"></span></p></div>
         <form method="post" action="{{ route('admin.logout', absolute: false) }}">@csrf<button type="submit">Log out</button></form>
     </header>
     
@@ -154,14 +155,30 @@
     <div class="content-row">
         <!-- Daily stats panel -->
         <div class="panel daily-stats">
-            <h2>Daily Results</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <h2 style="margin: 0;">Daily Results</h2>
+                <div>
+                    <label for="date-selector" style="font-size: 0.9rem; margin-right: 0.5rem;">Date:</label>
+                    <input type="date" id="date-selector" value="{{ $date }}" max="{{ $gameDate }}" style="font-size: 0.9rem;">
+                </div>
+            </div>
             <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; font-size: 0.9rem;">
                 <div><span class="legend"><span class="regular"></span> Regular</span></div>
                 <div><span class="legend"><span class="hard"></span> Hard</span></div>
                 <div style="margin-left: auto; text-align: right;">
-                    <div>Daily games today: <strong>{{ number_format($results->count()) }}</strong></div>
-                    <div>Practice games today: <strong>{{ number_format($practiceToday) }}</strong></div>
-                    <div>First 10 copied today: <strong>{{ $todayFirstTenCopied ? '✓' : '—' }}</strong></div>
+                    <div>Daily games @if ($date !== $gameDate)
+on {{ $date }}
+                    @else
+today
+                    @endif
+: <strong>{{ number_format($results->count()) }}</strong></div>
+                    <div>Practice games @if ($date !== $gameDate)
+on {{ $date }}
+                    @else
+today
+                    @endif
+: <strong>{{ number_format($practiceToday) }}</strong></div>
+                    @if ($date === $gameDate)<div>First 10 copied today: <strong>{{ $todayFirstTenCopied ? '✓' : '—' }}</strong></div>@endif
                 </div>
             </div>
             @php
@@ -375,6 +392,22 @@
     </div>
 </main>
 <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const dateSelector = document.getElementById('date-selector');
+        if (dateSelector) {
+            dateSelector.addEventListener('change', (e) => {
+                const selectedDate = e.target.value;
+                const url = new URL(window.location);
+                if (selectedDate === '{{ $gameDate }}') {
+                    url.searchParams.delete('date');
+                } else {
+                    url.searchParams.set('date', selectedDate);
+                }
+                window.location = url.toString();
+            });
+        }
+    });
+
     const seededSlots = [...document.querySelectorAll('.seeded-slot')];
     const seededInput = document.getElementById('seeded-card-input');
     const seededMessage = document.getElementById('seeded-message');

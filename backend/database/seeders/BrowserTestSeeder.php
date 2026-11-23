@@ -38,5 +38,8 @@ class BrowserTestSeeder extends Seeder
                 'updated_at' => now(),
             ]);
         }
+
+        // Seed codespace test data
+        $this->call(CodespaceSeeder::class);
     }
 }

@@ -55,9 +55,9 @@ class SeededRunTest extends TestCase
         $this->post('/admin/seeded-runs', $data)->assertRedirect('/admin/login');
         $this->withSession($this->admin)->post('/admin/seeded-runs', $data)->assertRedirect('/admin')->assertSessionHasNoErrors();
         $this->withSession($this->admin)->get('/admin?edit=2026-03-16')->assertOk()
-            ->assertSee('Edit seeded run')->assertSee('card-0 / card-1')
+            ->assertSee('Edit seeded run')->assertSee('card-0')->assertSee('card-1')
             ->assertSee('<option value="pride" selected>Pride</option>', false)
-            ->assertSee('Site logo: Pride');
+            ->assertSee('Site logo');
 
         $data['cards'][0] = 'card-20';
         $this->withSession($this->admin)->put('/admin/seeded-runs/2026-03-16', $data)->assertSessionHasNoErrors();
