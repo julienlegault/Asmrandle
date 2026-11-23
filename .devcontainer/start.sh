@@ -25,6 +25,11 @@ prepare() {
     sleep 2
   done
   php backend/artisan cards:initialize-development
+
+  # Seed Codespace-specific development data (admin account + past runs)
+  if [[ "${CODESPACES:-false}" == "true" ]]; then
+    php backend/artisan db:seed --class=CodespaceSeeder --force
+  fi
 }
 
 until (prepare); do
