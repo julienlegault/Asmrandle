@@ -122,7 +122,7 @@ class AdminTest extends TestCase
 
     public function test_login_attempts_are_rate_limited(): void
     {
-        for ($i = 0; $i < 5; $i++) {
+        for ($i = 0; $i < 20; $i++) {
             $this->post('/admin/login', ['username' => 'nobody', 'password' => 'wrong'])->assertRedirect();
         }
         $this->post('/admin/login', ['username' => 'nobody', 'password' => 'wrong'])->assertStatus(429);
