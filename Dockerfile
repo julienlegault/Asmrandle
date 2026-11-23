@@ -1,5 +1,27 @@
 FROM composer:2 AS composer
 
+FROM node:20 AS frontend-builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npx playwright install --with-deps chromium
+
+FROM php:8.3-apache-bookworm AS test-stage
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git unzip libonig-dev libxml2-dev sqlite3 \
+    && docker-php-ext-install pdo_mysql pdo_sqlite mbstring xml \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer /usr/bin/composer /usr/local/bin/composer
+WORKDIR /var/www/html
+COPY backend/composer.json backend/composer.lock ./backend/
+RUN composer install --working-dir=backend --no-interaction --prefer-dist
+COPY backend/ ./backend/
+COPY tests/ ./tests/
+
+RUN cd backend && php vendor/bin/phpunit --configuration phpunit.xml
+
 FROM php:8.3-apache-bookworm
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git unzip libonig-dev libxml2-dev \
@@ -11,6 +33,7 @@ COPY --from=composer /usr/bin/composer /usr/local/bin/composer
 WORKDIR /var/www/html
 COPY backend/composer.json backend/composer.lock ./backend/
 RUN composer install --working-dir=backend --no-dev --no-interaction --no-scripts --prefer-dist
+COPY --from=test-stage /var/www/html/backend/vendor ./backend/vendor
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 RUN mkdir -p backend/bootstrap/cache backend/storage/app/private backend/storage/app/public \
