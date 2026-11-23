@@ -58,6 +58,9 @@ test('seeded runs fit on mobile, including expanded matchups', async ({ page }) 
     await expect(locked.getByRole('button', { name: 'View all matchups' })).toHaveAttribute('aria-expanded', 'true');
     await expect(locked.locator('.run-matchups-list')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+
+    await page.addStyleTag({ content: '#date-selector { min-width: 180px; }' });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 });
 
 test('pagination updates only seeded runs and supports browser history', async ({ page }) => {

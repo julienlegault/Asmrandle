@@ -171,7 +171,7 @@
     <div class="content-row">
         <!-- Daily stats panel -->
         <div class="panel daily-stats">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                 <h2 style="margin: 0;">Daily Results</h2>
                 <div>
                     <label for="date-selector" style="font-size: 0.9rem; margin-right: 0.5rem;">Date:</label>
