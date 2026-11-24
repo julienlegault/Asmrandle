@@ -42,6 +42,22 @@ class GameApiTest extends TestCase
         parent::tearDown();
     }
 
+    protected function getTestResultData(array $overrides = []): array
+    {
+        $time = now()->subSeconds(30);
+        // Format to match JavaScript's toISOString(): 2026-03-15T11:59:30.000Z
+        $startedAt = $time->format('Y-m-d\TH:i:s.000\Z');
+        
+        return array_merge([
+            'mode' => 'daily',
+            'date' => '2026-03-15',
+            'hardMode' => false,
+            'answers' => array_fill(0, 10, false),
+            'submissionId' => (string) Str::uuid(),
+            'startedAt' => $startedAt,
+        ], $overrides);
+    }
+
     public function test_daily_rounds_are_shared_and_unchanged_after_card_refresh(): void
     {
         $this->postJson('/api/games', ['mode' => 'daily'])->assertOk()->assertJsonPath('id', '2026-03-15');
@@ -95,22 +111,16 @@ class GameApiTest extends TestCase
     public function test_daily_results_are_idempotent_and_counted_by_mode(): void
     {
         $this->postJson('/api/games', ['mode' => 'daily'])->assertOk();
-        $data = [
-            'mode' => 'daily',
-            'date' => '2026-03-15',
-            'hardMode' => true,
-            'answers' => array_fill(0, 10, true),
-            'submissionId' => (string) Str::uuid(),
-        ];
+        $data = $this->getTestResultData(['hardMode' => true, 'answers' => array_fill(0, 10, true)]);
         $this->postJson('/api/results', $data)->assertOk()->assertJsonPath('firstTen', true);
         $this->postJson('/api/results', $data)->assertOk()->assertJsonPath('firstTen', true);
-        $data['submissionId'] = (string) Str::uuid();
+        $data = $this->getTestResultData(['hardMode' => true, 'answers' => array_fill(0, 10, true)]);
         $this->postJson('/api/results', $data)->assertOk()->assertJsonPath('firstTen', false);
         $this->getJson('/api/community')->assertOk()
             ->assertJsonPath('hardModeCounts.10', 2)
             ->assertJsonPath('counts.10', 0)
             ->assertJsonPath('questions.1.0', 2);
-        $data['submissionId'] = (string) Str::uuid();
+        $data = $this->getTestResultData(['hardMode' => true, 'answers' => array_fill(0, 10, true)]);
         $data['answers'][0] = false;
         $this->postJson('/api/results', $data)->assertOk()->assertJsonPath('firstTen', false);
         $this->getJson('/api/community')->assertOk()
@@ -118,6 +128,7 @@ class GameApiTest extends TestCase
             ->assertJsonPath('questions.1.0', 2)
             ->assertJsonPath('questions.1.1', 3)
             ->assertJsonPath('questions.0.1', 0);
+        $data = $this->getTestResultData(['hardMode' => true]);
         $data['answers'] = [true];
         $this->postJson('/api/results', $data)->assertUnprocessable();
     }
@@ -125,13 +136,7 @@ class GameApiTest extends TestCase
     public function test_daily_submission_id_cannot_be_reused_for_different_results(): void
     {
         $this->postJson('/api/games', ['mode' => 'daily'])->assertOk();
-        $data = [
-            'mode' => 'daily',
-            'date' => '2026-03-15',
-            'hardMode' => false,
-            'answers' => array_fill(0, 10, true),
-            'submissionId' => (string) Str::uuid(),
-        ];
+        $data = $this->getTestResultData(['answers' => array_fill(0, 10, true)]);
         $this->postJson('/api/results', $data)->assertOk();
         $data['hardMode'] = true;
         $this->postJson('/api/results', $data)->assertStatus(409);
@@ -143,28 +148,23 @@ class GameApiTest extends TestCase
     public function test_practice_results_can_be_saved_after_the_daily_rollover(): void
     {
         Carbon::setTestNow('2026-03-16 06:00:00 UTC');
-        $this->postJson('/api/results', [
+        $this->postJson('/api/results', $this->getTestResultData([
             'mode' => 'practice',
             'date' => '2026-03-15',
-            'hardMode' => false,
             'answers' => array_fill(0, 10, true),
-            'submissionId' => (string) Str::uuid(),
-        ])->assertOk();
+        ]))->assertOk();
         $this->assertSame(1, DB::table('practice_plays')->count());
     }
 
     public function test_result_durations_are_validated_and_saved_for_both_modes(): void
     {
         $this->postJson('/api/games', ['mode' => 'daily'])->assertOk();
-        $data = [
-            'mode' => 'daily', 'date' => '2026-03-15', 'hardMode' => false,
-            'answers' => array_fill(0, 10, true), 'submissionId' => (string) Str::uuid(),
-            'durationMs' => 59999,
-        ];
+        $data = $this->getTestResultData(['answers' => array_fill(0, 10, true), 'durationMs' => 59999]);
         $this->postJson('/api/results', $data)->assertOk();
         $data['durationMs'] = 60000;
         $this->postJson('/api/results', $data)->assertOk();
         $this->assertEquals(59999, DB::table('game_results')->value('duration_ms'));
+        $this->assertNotNull(DB::table('game_results')->value('started_at'));
         $data['mode'] = 'practice';
         $this->postJson('/api/results', $data)->assertOk();
         $this->assertEquals(60000, DB::table('practice_plays')->value('duration_ms'));
@@ -430,13 +430,10 @@ class GameApiTest extends TestCase
     {
         $this->postJson('/api/games', ['mode' => 'daily'])->assertOk();
         $submissionId = (string) Str::uuid();
-        $this->postJson('/api/results', [
-            'mode' => 'daily',
-            'date' => '2026-03-15',
-            'hardMode' => false,
-            'answers' => array_fill(0, 10, true),
+        $this->postJson('/api/results', $this->getTestResultData([
             'submissionId' => $submissionId,
-        ])->assertOk()->assertJsonPath('firstTen', true);
+            'answers' => array_fill(0, 10, true),
+        ]))->assertOk()->assertJsonPath('firstTen', true);
 
         $this->assertSame(0, DB::table('game_results')->where('submission_id', $submissionId)->value('score_copied'));
 
@@ -453,13 +450,10 @@ class GameApiTest extends TestCase
         $submissionId = (string) Str::uuid();
         $deviceId = (string) Str::uuid();
         $this->withHeader('X-Device-ID', $deviceId);
-        $this->postJson('/api/results', [
-            'mode' => 'daily',
-            'date' => '2026-03-15',
-            'hardMode' => false,
-            'answers' => [true, true, true, true, true, true, true, true, true, false],
+        $this->postJson('/api/results', $this->getTestResultData([
             'submissionId' => $submissionId,
-        ])->assertOk()->assertJsonPath('firstTen', false);
+            'answers' => [true, true, true, true, true, true, true, true, true, false],
+        ]))->assertOk()->assertJsonPath('firstTen', false);
 
         $this->postJson("/api/results/{$submissionId}/mark-copied")->assertOk();
         $this->postJson("/api/results/{$submissionId}/mark-copied")->assertOk();

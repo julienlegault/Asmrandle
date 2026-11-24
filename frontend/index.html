@@ -756,6 +756,7 @@
     let fastModeAvailable = false;
     let submissionId = null;
     let gameStartedAt = null;
+    let gameStartTime = null;
     let gameDurationMs = null;
     let perfectScoreEmojis = null;
     let copyToastTimeout = null;
@@ -1230,6 +1231,7 @@
       resultArray = [];
       submissionId = null;
       gameStartedAt = null;
+      gameStartTime = null;
       gameDurationMs = null;
       currentPair = 0;
       correctCount = 0;
@@ -1248,6 +1250,7 @@
         if (game.date !== dateStr) throw new Error("The daily challenge changed. Reload the page.");
         setLogo(game.logo);
         gameId = game.id;
+        gameStartedAt = game.startedAt;
         if (type === 'daily') {
           gameType = 1;
           perfectScoreEmojis = game.perfectScoreEmojis;
@@ -1266,7 +1269,16 @@
             correctCount = resultArray.filter(item => item).length;
             resultToCopy = getResultEmojiString();
             resultToCopy += ` ${correctCount}/10`;
-            resultText.textContent = `You have already played today's Asmrandle! Your score was ${correctCount}/10.`;
+            
+            let resultLine = `You have already played today's Asmrandle! Your score was ${correctCount}/10.`;
+            
+            // Add speedy indicator if applicable
+            if (todayResult.elapsedSeconds !== null && todayResult.elapsedSeconds < 60) {
+              resultLine += ` Speedy! ${todayResult.elapsedSeconds.toFixed(1)} seconds!`;
+              resultToCopy += ` | 🏃🏻 ${todayResult.elapsedSeconds.toFixed(1)}sec`;
+            }
+            
+            resultText.textContent = resultLine;
             startCountdown();
             resultToCopy += ` ${hardMode?'| Hard Mode ':''}| ${dateStr} | https://asmrandle.com`;
             gameArea.style.display = "none";
@@ -1307,7 +1319,7 @@
           dot.className = "dot";
           scoreboard.appendChild(dot);
         }
-        gameStartedAt = performance.now();
+        gameStartTime = performance.now();
         showNextPair();
       } catch (error) {
         console.error(error);
@@ -1331,7 +1343,8 @@
             hardMode,
             answers: resultArray,
             submissionId,
-            durationMs: gameDurationMs
+            durationMs: gameDurationMs,
+            startedAt: gameStartedAt
           })
         });
         if (gameType === 1) {
@@ -1370,11 +1383,45 @@
       gameArea.style.display = "none";
       result.style.display = "block";
       if (gameType === 1) {
-        resultText.textContent = `${dateStr} | ${correctCount}/10 correct`;
+        // Calculate elapsed time
+        let elapsedSeconds = null;
+        if (gameStartedAt) {
+          const startTime = new Date(gameStartedAt).getTime();
+          const endTime = new Date().getTime();
+          elapsedSeconds = (endTime - startTime) / 1000;
+        }
+
+        let resultLine = `${dateStr} | ${correctCount}/10 correct`;
+        
+        // Add speedy score if under 60 seconds
+        if (elapsedSeconds !== null && elapsedSeconds < 60) {
+          resultLine += ` | 🏃🏻 ${elapsedSeconds.toFixed(1)}sec`;
+        }
+        
+        resultText.textContent = resultLine;
         startCountdown(); // Start the live countdown timer
         resultToCopy = getResultEmojiString();
-        resultToCopy += ` ${correctCount}/10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`
+        resultToCopy += ` ${correctCount}/10`;
+        
+        // Add speedy indicator to copied score
+        if (elapsedSeconds !== null && elapsedSeconds < 60) {
+          resultToCopy += ` | 🏃🏻 ${elapsedSeconds.toFixed(1)}sec`;
+        }
+        
+        resultToCopy += ` ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
+        
         showCommunityResults();
+        
+        // Show speedy message if applicable
+        if (elapsedSeconds !== null && elapsedSeconds < 60) {
+          const speedyMsg = document.createElement("div");
+          speedyMsg.style.textAlign = "center";
+          speedyMsg.style.marginTop = "1rem";
+          speedyMsg.style.marginBottom = "1rem";
+          speedyMsg.style.fontSize = "1.2em";
+          speedyMsg.textContent = `🏃🏻 Speedy! ${elapsedSeconds.toFixed(1)} seconds!`;
+          result.insertBefore(speedyMsg, result.querySelector("#community-results"));
+        }
       } else {
         resultText.textContent = `You got ${correctCount}/10 correct.`;
       }
@@ -1464,7 +1511,7 @@
 
       currentPair++;
       if (currentPair === 10) {
-        gameDurationMs = Math.min(Math.floor(performance.now() - gameStartedAt), 2147483647);
+        gameDurationMs = Math.min(Math.floor(performance.now() - gameStartTime), 2147483647);
       }
       const startWait = Date.now();
       const next = async () => {
@@ -1486,7 +1533,6 @@
   </script>
 </body>
 </html>
-
 
 
 
