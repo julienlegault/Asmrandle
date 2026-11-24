@@ -210,6 +210,35 @@
     #play-again:hover {
       background-color: #75c760;
     }
+    #copy-toast {
+      position: fixed;
+      z-index: 10000;
+      top: 16px;
+      left: 50%;
+      padding: 10px 18px;
+      border-radius: 999px;
+      background: #63a452;
+      color: #111;
+      font-weight: bold;
+      white-space: nowrap;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+      opacity: 0;
+      visibility: hidden;
+      transform: translate(-50%, calc(-100% - 24px));
+      transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s linear 0.3s;
+      pointer-events: none;
+    }
+    #copy-toast.visible {
+      opacity: 1;
+      visibility: visible;
+      transform: translate(-50%, 0);
+      transition-delay: 0s;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #copy-toast {
+        transition-duration: 0.01ms;
+      }
+    }
 
     .flavorOverlay {
       position: absolute;
@@ -656,6 +685,7 @@
   </script>
 </head>
 <body>
+  <div id="copy-toast" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="fast-mode-setting" hidden>
     <label class="fast-mode-label">
       Fast Mode (development)
@@ -684,6 +714,7 @@
     <h3 id="time-to-next-daily"></h3>
     <button id="copy-results" onClick="copyToKeyboard()">Copy Results</button>
     <button id="play-again" onClick="location.reload()">Play Again</button>
+    <p id="copy-error" role="alert"></p>
     <div id="community-results"></div>
     <div id="result-breakdown"></div>
   </div>
@@ -709,6 +740,7 @@
     const resultText = document.getElementById("result-text");
     const timeToNextDaily = document.getElementById("time-to-next-daily");
     const copyResultsBtn = document.getElementById("copy-results");
+    const copyToast = document.getElementById("copy-toast");
     const rules = document.getElementById("rules");
 
     let cardData = [];
@@ -724,6 +756,7 @@
     let fastModeAvailable = false;
     let submissionId = null;
     let perfectScoreEmojis = null;
+    let copyToastTimeout = null;
     let logoVariant = 'standard';
     const logos = {
       standard: { splash: '/images/Logo-Splash.png', play: '/images/Logo-Play.png' },
@@ -1369,16 +1402,28 @@
       });
     }
 
-    function copyToKeyboard() {
-      navigator.clipboard.writeText(resultToCopy);
-      
-      if (firstTen && submissionId) {
-        fetch('/api/results/' + submissionId + '/mark-copied', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        }).catch(err => console.error('Failed to mark first ten as copied:', err));
+    async function copyToKeyboard() {
+      const copyError = document.getElementById("copy-error");
+      copyError.textContent = "";
+      copyToast.classList.remove("visible");
+      clearTimeout(copyToastTimeout);
+      try {
+        await navigator.clipboard.writeText(resultToCopy);
+      } catch (error) {
+        console.error('Failed to copy score:', error);
+        copyError.textContent = "Could not copy your score. Please try again.";
+        return;
+      }
+      copyToast.textContent = "Results Copied!";
+      copyToast.classList.add("visible");
+      copyToastTimeout = setTimeout(() => copyToast.classList.remove("visible"), 2000);
+      if (submissionId && gameType === 1) {
+        try {
+          await api('/results/' + submissionId + '/mark-copied', { method: 'POST' });
+        } catch (error) {
+          console.error('Failed to record copied score:', error);
+          copyError.textContent = "Your score was copied, but sharing could not be recorded. Please try again.";
+        }
       }
     }
 

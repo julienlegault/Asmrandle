@@ -210,17 +210,21 @@ class GameApiTest extends TestCase
             'submissionId' => $submissionId,
         ])->assertOk()->assertJsonPath('firstTen', true);
 
-        $this->assertSame(0, DB::table('game_results')->where('submission_id', $submissionId)->value('first_ten_copied'));
+        $this->assertSame(0, DB::table('game_results')->where('submission_id', $submissionId)->value('score_copied'));
 
         $this->postJson("/api/results/{$submissionId}/mark-copied")->assertOk()->assertJsonPath('success', true);
 
-        $this->assertSame(1, DB::table('game_results')->where('submission_id', $submissionId)->value('first_ten_copied'));
+        $this->assertSame(1, DB::table('game_results')->where('submission_id', $submissionId)->value('score_copied'));
+        $this->postJson('/api/results/lookup', ['submissionId' => $submissionId])
+            ->assertOk()->assertJsonPath('scoreCopied', true)->assertJsonMissingPath('firstTenCopied');
     }
 
-    public function test_mark_copied_fails_if_not_first_ten(): void
+    public function test_non_first_ten_can_be_marked_as_copied_idempotently(): void
     {
         $this->postJson('/api/games', ['mode' => 'daily'])->assertOk();
         $submissionId = (string) Str::uuid();
+        $deviceId = (string) Str::uuid();
+        $this->withHeader('X-Device-ID', $deviceId);
         $this->postJson('/api/results', [
             'mode' => 'daily',
             'date' => '2026-03-15',
@@ -229,6 +233,13 @@ class GameApiTest extends TestCase
             'submissionId' => $submissionId,
         ])->assertOk()->assertJsonPath('firstTen', false);
 
-        $this->postJson("/api/results/{$submissionId}/mark-copied")->assertNotFound();
+        $this->postJson("/api/results/{$submissionId}/mark-copied")->assertOk();
+        $this->postJson("/api/results/{$submissionId}/mark-copied")->assertOk();
+        $this->assertSame(1, DB::table('game_results')->where('submission_id', $submissionId)->value('score_copied'));
+        $this->postJson('/api/results/lookup', ['submissionId' => $submissionId])
+            ->assertOk()->assertJsonPath('scoreCopied', true);
+        $this->getJson('/api/results/today')->assertOk()->assertJsonPath('scoreCopied', true)
+            ->assertJsonMissingPath('firstTenCopied');
+        $this->postJson('/api/results/'.Str::uuid().'/mark-copied')->assertNotFound();
     }
 }

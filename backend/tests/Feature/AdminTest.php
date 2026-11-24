@@ -166,12 +166,12 @@ class AdminTest extends TestCase
         ]);
 
         // Add game results for different days
-        // Day 1 (2026-03-19 - today): 5 games, all with perfect 10, 1 with first_ten_copied
+        // Day 1 (2026-03-19 - today): 5 games, 2 shared including the first 10
         for ($i = 0; $i < 5; $i++) {
             $answers = array_fill(0, 10, true);
             DB::table('game_results')->insert([
                 'submission_id' => (string) Str::uuid(), 'date' => '2026-03-19', 'hard_mode' => false,
-                'score' => 10, 'first_ten' => $i === 0, 'first_ten_copied' => $i === 0,
+                'score' => 10, 'first_ten' => $i === 0, 'score_copied' => $i < 2,
                 'answers' => json_encode($answers), 'created_at' => now(), 'updated_at' => now(),
             ]);
         }
@@ -182,7 +182,7 @@ class AdminTest extends TestCase
             $answers[0] = false;
             DB::table('game_results')->insert([
                 'submission_id' => (string) Str::uuid(), 'date' => '2026-03-18', 'hard_mode' => false,
-                'score' => 9, 'first_ten' => false, 'first_ten_copied' => false,
+                'score' => 9, 'first_ten' => false, 'score_copied' => $i === 0,
                 'answers' => json_encode($answers), 'created_at' => now(), 'updated_at' => now(),
             ]);
         }
@@ -191,7 +191,8 @@ class AdminTest extends TestCase
         $response = $this->withSession($session)->get('/admin')->assertOk();
 
         // Check view data
-        $response->assertViewHas('todayFirstTenCopied', true);
+        $response->assertViewHas('firstTenCopied', true);
+        $response->assertViewHas('scoresShared', 2)->assertViewHas('totalScoresShared', 3);
         $response->assertViewHas('perfectScoreStats', [
             'noPerfects' => 1,
             'totalDays' => 1,
@@ -202,6 +203,7 @@ class AdminTest extends TestCase
 
         // Check displayed text
         $response->assertSee('First 10 copied today');
+        $response->assertSee('Scores Shared');
         $response->assertSee('Days with no perfect 10s');
         $response->assertSee('1');
         $response->assertSee('100.0');
@@ -209,6 +211,27 @@ class AdminTest extends TestCase
         $response->assertSee('3.0');
         $response->assertSee('All-time average score');
         $response->assertSee('9.63');
+
+        $this->withSession($session)->get('/admin?date=2026-03-18')->assertOk()
+            ->assertViewHas('firstTenCopied', false)->assertViewHas('scoresShared', 1)
+            ->assertViewHas('totalScoresShared', 3)
+            ->assertSee('First 10 copied on 2026-03-18: <strong>—</strong>', false)
+            ->assertSee('Scores Shared: <strong>1</strong>', false);
+        $this->withSession($session)->get('/admin?date=2026-03-17')->assertOk()
+            ->assertViewHas('firstTenCopied', false)->assertViewHas('scoresShared', 0);
+    }
+
+    public function test_share_flag_migration_preserves_existing_values(): void
+    {
+        $migration = require database_path('migrations/2026_11_24_000000_rename_first_ten_copied_to_score_copied.php');
+        $migration->down();
+        DB::table('game_results')->insert([
+            'submission_id' => (string) Str::uuid(), 'date' => '2026-03-19', 'hard_mode' => false,
+            'score' => 10, 'first_ten' => true, 'first_ten_copied' => true,
+            'answers' => json_encode(array_fill(0, 10, true)), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $migration->up();
+        $this->assertSame(1, DB::table('game_results')->value('score_copied'));
     }
 
     public function test_all_time_day_statistics_only_include_completed_game_days(): void

@@ -1,4 +1,6 @@
 const { test, expect } = require('@playwright/test');
+const fs = require('node:fs');
+const path = require('node:path');
 const BASE_URL = process.env.ASMRANDLE_BASE_URL || 'http://localhost:8000';
 
 test.describe('Asmrandle E2E Tests', () => {
@@ -429,6 +431,54 @@ test.describe('Asmrandle E2E Tests', () => {
         await page.click('#copy-results');
         const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
         expect(clipboardText).toContain('| Hard Mode |');
+    });
+
+    test('copying a non-first daily score records only successful clipboard writes', async ({ page }) => {
+        const date = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const submissionId = 'c0d0ab90-6ed0-491b-8447-000000000001';
+        let marks = 0;
+        await page.addInitScript(() => {
+            window.failCopy = true;
+            Object.defineProperty(navigator, 'clipboard', {
+                value: { writeText: async () => { if (window.failCopy) throw new Error('denied'); } },
+            });
+        });
+        await page.route(BASE_URL + '/', route => route.fulfill({
+            contentType: 'text/html',
+            body: fs.readFileSync(path.join(__dirname, '../frontend/index.html'), 'utf8'),
+        }));
+        await page.route('**/api/**', route => {
+            const pathname = new URL(route.request().url()).pathname;
+            if (pathname === '/api/config') return route.fulfill({ json: { fastModeAvailable: true, logo: 'standard' } });
+            if (pathname === '/api/games') return route.fulfill({ json: { id: date, date, logo: 'standard' } });
+            if (pathname === '/api/results/today') return route.fulfill({ json: {
+                firstTen: false, hardMode: false, answers: Array(10).fill(false), submissionId,
+            } });
+            if (pathname.includes('/rounds/')) return route.fulfill({ json: { cards: [
+                { name: 'one', popularity: 80, img: '/images/Logo-Play.png' },
+                { name: 'two', popularity: 20, img: '/images/Logo-Play.png' },
+            ] } });
+            if (pathname === '/api/community') return route.fulfill({ json: {
+                counts: Array(11).fill(0), hardModeCounts: Array(11).fill(0), questions: [Array(10).fill(0), Array(10).fill(0)],
+            } });
+            if (pathname === `/api/results/${submissionId}/mark-copied`) {
+                marks++;
+                return marks === 1 ? route.fulfill({ status: 500 }) : route.fulfill({ json: { success: true } });
+            }
+            return route.fulfill({ status: 404 });
+        });
+        await page.goto(BASE_URL);
+        await page.click('#start-daily');
+        await expect(page.locator('#result')).toBeVisible();
+        await page.click('#copy-results');
+        await expect(page.locator('#copy-error')).toContainText('Could not copy');
+        expect(marks).toBe(0);
+        await page.evaluate(() => { window.failCopy = false; });
+        await page.click('#copy-results');
+        await expect(page.locator('#copy-error')).toContainText('sharing could not be recorded');
+        await page.click('#copy-results');
+        await expect(page.locator('#copy-error')).toHaveText('');
+        await expect.poll(() => marks).toBe(2);
     });
 
     test('Community results page loads correctly', async ({ page }) => {

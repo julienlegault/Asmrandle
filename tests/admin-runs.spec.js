@@ -22,6 +22,16 @@ function renderDashboard(query = '') {
                 'created_at' => now(), 'updated_at' => now(),
             ]);
         }
+        foreach ([-1, -2] as $offset) {
+            Illuminate\\Support\\Facades\\DB::table('game_results')->insert([
+                'submission_id' => (string) Illuminate\\Support\\Str::uuid(),
+                'date' => $gameDate->copy()->addDays($offset)->toDateString(),
+                'hard_mode' => false, 'score' => $offset === -1 ? 10 : 9,
+                'first_ten' => $offset === -1, 'score_copied' => true,
+                'answers' => json_encode(array_fill(0, 10, true)),
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
         $request = Illuminate\\Http\\Request::create('http://admin.test/admin'.($argv[1] ? '?'.$argv[1] : ''));
         $app->instance('request', $request);
         $response = $app->make(App\\Http\\Controllers\\AdminController::class)->dashboard($request, $app->make(App\\Services\\GameService::class));
@@ -36,6 +46,90 @@ function renderDashboard(query = '') {
         encoding: 'utf8',
     });
 }
+
+test('changing dates updates daily results without losing editor state and supports history', async ({ page }) => {
+    const todayPage = renderDashboard();
+    const today = todayPage.match(/id="date-selector" value="([^"]+)"/)[1];
+    const earlier = offset => {
+        const date = new Date(`${today}T00:00:00Z`);
+        date.setUTCDate(date.getUTCDate() - offset);
+        return date.toISOString().slice(0, 10);
+    };
+    const yesterday = earlier(1);
+    const older = earlier(2);
+    const pages = { [yesterday]: renderDashboard(`date=${yesterday}`), [older]: renderDashboard(`date=${older}`) };
+    let fail = false;
+    let hold = false;
+    let release;
+    const pending = new Promise(resolve => { release = resolve; });
+    await page.route('http://admin.test/admin**', async route => {
+        if (hold) {
+            hold = false;
+            await pending;
+        }
+        if (fail) {
+            fail = false;
+            return route.fulfill({ status: 500, body: 'Server error' });
+        }
+        const date = new URL(route.request().url()).searchParams.get('date');
+        return route.fulfill({ contentType: 'text/html', body: pages[date] || todayPage });
+    });
+    await page.goto('http://admin.test/admin');
+    await page.setViewportSize({ width: 1200, height: 800 });
+    const daily = page.locator('.daily-stats');
+    const editor = page.locator('#seeded-editor');
+    await expect(daily.locator('.chart > .bar-group')).toHaveCount(11);
+    await expect(daily.locator('.chart > .bar-group > .bars > .bar.regular')).toHaveCount(11);
+    await expect(daily.locator('.chart > .bar-group > .bars > .bar.hard')).toHaveCount(11);
+    await expect(daily.locator('.daily-content .pairs .pair')).toHaveCount(10);
+    await expect(page.locator('.content-row > .daily-stats + #seeded-editor')).toBeVisible();
+    const dailyBox = await daily.boundingBox();
+    const editorBox = await editor.boundingBox();
+    expect(editorBox.x).toBeGreaterThan(dailyBox.x);
+    expect(Math.abs(editorBox.y - dailyBox.y)).toBeLessThan(1);
+    await page.locator('#seeded-card-input').fill('unfinished selection');
+    await page.evaluate(() => { window.dashboardMarker = true; });
+    await page.locator('#date-selector').fill(yesterday);
+    await expect(page.locator('.daily-content')).toContainText('First 10 copied on ' + yesterday + ': ✓');
+    await expect(page.locator('.daily-content')).toContainText('Scores Shared: 1');
+    await expect(page.locator('#current-date')).toHaveText(yesterday);
+    await expect(page.locator('#seeded-card-input')).toHaveValue('unfinished selection');
+    await expect(editor).toBeVisible();
+    await expect(daily.locator('.chart > .bar-group')).toHaveCount(11);
+    await expect(daily.locator('.daily-content .pairs .pair')).toHaveCount(10);
+    expect(await page.evaluate(() => window.dashboardMarker)).toBe(true);
+
+    await page.locator('#date-selector').fill(older);
+    await expect(page.locator('.daily-content')).toContainText('First 10 copied on ' + older + ': —');
+    await expect(page.locator('.daily-content')).toContainText('Scores Shared: 1');
+    await page.goBack();
+    await expect(page.locator('#date-selector')).toHaveValue(yesterday);
+    await expect(page.locator('.daily-content')).toContainText('First 10 copied on ' + yesterday + ': ✓');
+    await page.goForward();
+    await expect(page.locator('#date-selector')).toHaveValue(older);
+    await expect(page.locator('.daily-content')).toContainText('First 10 copied on ' + older + ': —');
+
+    fail = true;
+    await page.locator('#date-selector').fill(today);
+    await expect(page.locator('#daily-load-error')).toHaveText('Could not load daily results. Please try again.');
+    await expect(page.locator('#date-selector')).toHaveValue(older);
+    await expect(page.locator('#seeded-card-input')).toHaveValue('unfinished selection');
+
+    await page.goBack();
+    await expect(page.locator('#date-selector')).toHaveValue(yesterday);
+    hold = true;
+    const request = page.waitForRequest(request => new URL(request.url()).searchParams.get('date') === older);
+    await page.locator('#date-selector').fill(older);
+    await request;
+    try {
+        await page.goBack();
+        await expect(page.locator('#date-selector')).toHaveValue(today);
+        await expect(page.locator('.daily-content')).toContainText('First 10 copied today: —');
+    } finally {
+        release();
+    }
+    await expect(page.locator('#current-date')).toHaveText(today);
+});
 
 test('seeded runs fit on mobile, including expanded matchups', async ({ page }) => {
     const html = renderDashboard();

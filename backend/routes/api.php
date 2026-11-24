@@ -127,17 +127,16 @@ Route::middleware('throttle:120,1')->group(function () {
         }, 3);
     });
 
-    Route::post('/results/{submissionId}/mark-copied', function (string $submissionId, GameService $games) {
+    Route::post('/results/{submissionId}/mark-copied', function (string $submissionId) {
         $result = DB::table('game_results')
             ->where('submission_id', $submissionId)
-            ->where('first_ten', true)
             ->first();
         
         abort_unless($result, 404);
 
         DB::table('game_results')
             ->where('submission_id', $submissionId)
-            ->update(['first_ten_copied' => true]);
+            ->update(['score_copied' => true]);
 
         return ['success' => true];
     });
@@ -157,7 +156,7 @@ Route::middleware('throttle:120,1')->group(function () {
             'score' => (int) $result->score,
             'hardMode' => (bool) $result->hard_mode,
             'firstTen' => (bool) $result->first_ten,
-            'firstTenCopied' => (bool) $result->first_ten_copied,
+            'scoreCopied' => (bool) $result->score_copied,
             'answers' => json_decode($result->answers, true),
             'submissionId' => $result->submission_id,
             'date' => $result->date,
@@ -179,7 +178,7 @@ Route::middleware('throttle:120,1')->group(function () {
             'score' => (int) $result->score,
             'hardMode' => (bool) $result->hard_mode,
             'firstTen' => (bool) $result->first_ten,
-            'firstTenCopied' => (bool) $result->first_ten_copied,
+            'scoreCopied' => (bool) $result->score_copied,
             'answers' => json_decode($result->answers, true),
             'date' => $result->date,
         ];
