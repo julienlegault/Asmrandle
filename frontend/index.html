@@ -758,6 +758,7 @@
     let perfectScoreEmojis = null;
     let copyToastTimeout = null;
     let logoVariant = 'standard';
+    let gameStartedAt = null;
     const logos = {
       standard: { splash: '/images/Logo-Splash.png', play: '/images/Logo-Play.png' },
       pride: { splash: '/images/Logo-Splash-Pride.png', play: '/images/Logo-Play-Pride.png' }
@@ -1230,6 +1231,7 @@
       currentPair = 0;
       correctCount = 0;
       gameType = 0;
+      gameStartedAt = null;
       perfectScoreEmojis = null;
       scoreboard.innerHTML = "";
       gameError.textContent = "";
@@ -1244,6 +1246,7 @@
         if (game.date !== dateStr) throw new Error("The daily challenge changed. Reload the page.");
         setLogo(game.logo);
         gameId = game.id;
+        gameStartedAt = game.startedAt;
         if (type === 'daily') {
           gameType = 1;
           perfectScoreEmojis = game.perfectScoreEmojis;
@@ -1262,7 +1265,16 @@
             correctCount = resultArray.filter(item => item).length;
             resultToCopy = getResultEmojiString();
             resultToCopy += ` ${correctCount}/10`;
-            resultText.textContent = `You have already played today's Asmrandle! Your score was ${correctCount}/10.`;
+            
+            let resultLine = `You have already played today's Asmrandle! Your score was ${correctCount}/10.`;
+            
+            // Add speedy indicator if applicable
+            if (todayResult.elapsedSeconds !== null && todayResult.elapsedSeconds < 60) {
+              resultLine += ` Speedy! ${todayResult.elapsedSeconds.toFixed(1)} seconds!`;
+              resultToCopy += ` | 🏃🏻 ${todayResult.elapsedSeconds.toFixed(1)}sec`;
+            }
+            
+            resultText.textContent = resultLine;
             startCountdown();
             resultToCopy += ` ${hardMode?'| Hard Mode ':''}| ${dateStr} | https://asmrandle.com`;
             gameArea.style.display = "none";
@@ -1325,7 +1337,8 @@
             date: dateStr,
             hardMode,
             answers: resultArray,
-            submissionId
+            submissionId,
+            startedAt: gameStartedAt
           })
         });
         if (gameType === 1) {
@@ -1364,11 +1377,45 @@
       gameArea.style.display = "none";
       result.style.display = "block";
       if (gameType === 1) {
-        resultText.textContent = `${dateStr} | ${correctCount}/10 correct`;
+        // Calculate elapsed time
+        let elapsedSeconds = null;
+        if (gameStartedAt) {
+          const startTime = new Date(gameStartedAt).getTime();
+          const endTime = new Date().getTime();
+          elapsedSeconds = (endTime - startTime) / 1000;
+        }
+
+        let resultLine = `${dateStr} | ${correctCount}/10 correct`;
+        
+        // Add speedy score if under 60 seconds
+        if (elapsedSeconds !== null && elapsedSeconds < 60) {
+          resultLine += ` | 🏃🏻 ${elapsedSeconds.toFixed(1)}sec`;
+        }
+        
+        resultText.textContent = resultLine;
         startCountdown(); // Start the live countdown timer
         resultToCopy = getResultEmojiString();
-        resultToCopy += ` ${correctCount}/10 ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`
+        resultToCopy += ` ${correctCount}/10`;
+        
+        // Add speedy indicator to copied score
+        if (elapsedSeconds !== null && elapsedSeconds < 60) {
+          resultToCopy += ` | 🏃🏻 ${elapsedSeconds.toFixed(1)}sec`;
+        }
+        
+        resultToCopy += ` ${hardMode? "| Hard Mode " : ""}| ${dateStr} | https://asmrandle.com`;
+        
         showCommunityResults();
+        
+        // Show speedy message if applicable
+        if (elapsedSeconds !== null && elapsedSeconds < 60) {
+          const speedyMsg = document.createElement("div");
+          speedyMsg.style.textAlign = "center";
+          speedyMsg.style.marginTop = "1rem";
+          speedyMsg.style.marginBottom = "1rem";
+          speedyMsg.style.fontSize = "1.2em";
+          speedyMsg.textContent = `🏃🏻 Speedy! ${elapsedSeconds.toFixed(1)} seconds!`;
+          result.insertBefore(speedyMsg, result.querySelector("#community-results"));
+        }
       } else {
         resultText.textContent = `You got ${correctCount}/10 correct.`;
       }
