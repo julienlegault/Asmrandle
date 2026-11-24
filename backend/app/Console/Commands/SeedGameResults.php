@@ -49,8 +49,7 @@ class SeedGameResults extends Command
             // Occasionally mark first_ten
             $firstTen = $score === 10 && rand(0, 100) < 20;
 
-            // If first_ten, occasionally mark as copied
-            $firstTenCopied = $firstTen && rand(0, 100) < 70;
+            $scoreCopied = rand(0, 100) < 70;
 
             $batch[] = [
                 'submission_id' => (string) Str::uuid(),
@@ -58,7 +57,7 @@ class SeedGameResults extends Command
                 'hard_mode' => $hardMode,
                 'score' => $score,
                 'first_ten' => $firstTen,
-                'first_ten_copied' => $firstTenCopied,
+                'score_copied' => $scoreCopied,
                 'answers' => json_encode($answers, JSON_THROW_ON_ERROR),
                 'created_at' => $randomDate,
                 'updated_at' => $randomDate,

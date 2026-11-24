@@ -683,6 +683,7 @@
     <h2 id="result-text"></h2>
     <h3 id="time-to-next-daily"></h3>
     <button id="copy-results" onClick="copyToKeyboard()">Copy Results</button>
+    <p id="copy-error" role="alert"></p>
     <button id="play-again" onClick="location.reload()">Play Again</button>
     <div id="community-results"></div>
     <div id="result-breakdown"></div>
@@ -1369,16 +1370,23 @@
       });
     }
 
-    function copyToKeyboard() {
-      navigator.clipboard.writeText(resultToCopy);
-      
-      if (firstTen && submissionId) {
-        fetch('/api/results/' + submissionId + '/mark-copied', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        }).catch(err => console.error('Failed to mark first ten as copied:', err));
+    async function copyToKeyboard() {
+      const copyError = document.getElementById("copy-error");
+      copyError.textContent = "";
+      try {
+        await navigator.clipboard.writeText(resultToCopy);
+      } catch (error) {
+        console.error('Failed to copy score:', error);
+        copyError.textContent = "Could not copy your score. Please try again.";
+        return;
+      }
+      if (submissionId && gameType === 1) {
+        try {
+          await api('/results/' + submissionId + '/mark-copied', { method: 'POST' });
+        } catch (error) {
+          console.error('Failed to record copied score:', error);
+          copyError.textContent = "Your score was copied, but sharing could not be recorded. Please try again.";
+        }
       }
     }
 

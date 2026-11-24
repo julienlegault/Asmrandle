@@ -129,7 +129,7 @@
 <main>
     <header>
         <div><h1><img src="/images/Logo-Play.png" alt="Admin dashboard"></h1><p class="muted">Game day <span id="current-date">{{ $date }}</span>@if ($date !== $gameDate)
- <span style="color: #efad72;">(historical)</span>@endif <span id="countdown-timer"></span></p></div>
+ <span id="historical-label" style="color: #efad72;">(historical)</span>@else <span id="historical-label" style="color: #efad72;" hidden>(historical)</span>@endif <span id="countdown-timer"></span></p></div>
         <form method="post" action="{{ route('admin.logout', absolute: false) }}">@csrf<button type="submit">Log out</button></form>
     </header>
     
@@ -150,6 +150,10 @@
             <div class="stat">
                 <div class="stat-label">Completed games, all time</div>
                 <strong>{{ number_format($totalGames) }}</strong>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Scores Shared</div>
+                <strong>{{ number_format($totalScoresShared) }}</strong>
             </div>
             <div class="stat">
                 <div class="stat-label">Days with no perfect 10s</div>
@@ -177,6 +181,8 @@
                     <input type="date" id="date-selector" value="{{ $date }}" max="{{ $gameDate }}" style="font-size: 0.9rem;">
                 </div>
             </div>
+            <p id="daily-load-error" class="errors" role="alert" hidden></p>
+            <div class="daily-content">
             <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; font-size: 0.9rem;">
                 <div><span class="legend"><span class="regular"></span> Regular</span></div>
                 <div><span class="legend"><span class="hard"></span> Hard</span></div>
@@ -193,7 +199,8 @@ on {{ $date }}
 today
                     @endif
 : <strong>{{ number_format($practiceToday) }}</strong></div>
-                    @if ($date === $gameDate)<div>First 10 copied today: <strong>{{ $todayFirstTenCopied ? '✓' : '—' }}</strong></div>@endif
+                    <div>First 10 copied {{ $date === $gameDate ? 'today' : 'on '.$date }}: <strong>{{ $firstTenCopied ? '✓' : '—' }}</strong></div>
+                    <div>Scores Shared: <strong>{{ number_format($scoresShared) }}</strong></div>
                 </div>
             </div>
             @php
@@ -258,6 +265,7 @@ today
                     @endforeach
                 </div>
             @endif
+            </div>
         </div>
         
         <!-- Schedule run panel -->
@@ -267,7 +275,7 @@ today
                 @csrf
                 @if ($editing) @method('PUT') @endif
                 <div class="schedule-run-top">
-                    <label>Game date <input type="date" name="date" min="{{ $date }}" value="{{ old('date', $editing ? $source->date : '') }}" required></label>
+                    <label>Game date <input type="date" name="date" min="{{ $gameDate }}" value="{{ old('date', $editing ? $source->date : '') }}" required></label>
                     <label>Perfect score (10 emojis)
                         <input type="text" name="perfect_score_emojis" value="{{ old('perfect_score_emojis', $sourceEmojis) }}" autocomplete="off" placeholder="Leave blank for default">
                     </label>
@@ -436,22 +444,6 @@ today
     </div>
 </main>
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const dateSelector = document.getElementById('date-selector');
-        if (dateSelector) {
-            dateSelector.addEventListener('change', (e) => {
-                const selectedDate = e.target.value;
-                const url = new URL(window.location);
-                if (selectedDate === '{{ $gameDate }}') {
-                    url.searchParams.delete('date');
-                } else {
-                    url.searchParams.set('date', selectedDate);
-                }
-                window.location = url.toString();
-            });
-        }
-    });
-
     const seededSlots = [...document.querySelectorAll('.seeded-slot')];
     const seededInput = document.getElementById('seeded-card-input');
     const seededMessage = document.getElementById('seeded-message');
@@ -662,29 +654,32 @@ today
     renderSeededCards();
     document.getElementById('seeded-save').disabled = false;
 
-    document.querySelectorAll('.card').forEach(card => {
-        let timer;
-        let start;
-        const cancel = () => {
-            clearTimeout(timer);
-            timer = null;
-            start = null;
-            card.classList.remove('is-pressed');
-        };
-        card.addEventListener('pointerdown', event => {
-            if (event.pointerType !== 'touch') return;
-            start = { x: event.clientX, y: event.clientY };
-            card.setPointerCapture(event.pointerId);
-            timer = setTimeout(() => card.classList.add('is-pressed'), 450);
+    function bindCardPreviews() {
+        document.querySelectorAll('.daily-content .card').forEach(card => {
+            let timer;
+            let start;
+            const cancel = () => {
+                clearTimeout(timer);
+                timer = null;
+                start = null;
+                card.classList.remove('is-pressed');
+            };
+            card.addEventListener('pointerdown', event => {
+                if (event.pointerType !== 'touch') return;
+                start = { x: event.clientX, y: event.clientY };
+                card.setPointerCapture(event.pointerId);
+                timer = setTimeout(() => card.classList.add('is-pressed'), 450);
+            });
+            card.addEventListener('pointermove', event => {
+                if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10) cancel();
+            });
+            card.addEventListener('pointerup', cancel);
+            card.addEventListener('pointercancel', cancel);
+            card.addEventListener('lostpointercapture', cancel);
+            card.addEventListener('contextmenu', event => event.preventDefault());
         });
-        card.addEventListener('pointermove', event => {
-            if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10) cancel();
-        });
-        card.addEventListener('pointerup', cancel);
-        card.addEventListener('pointercancel', cancel);
-        card.addEventListener('lostpointercapture', cancel);
-        card.addEventListener('contextmenu', event => event.preventDefault());
-    });
+    }
+    bindCardPreviews();
 
     // Countdown timer for game day
     function updateCountdown() {
@@ -710,8 +705,68 @@ today
     const manageRuns = document.getElementById('manage-runs');
     const runsLoadError = document.getElementById('runs-load-error');
     const runsLoading = document.getElementById('runs-loading');
+    const dateSelector = document.getElementById('date-selector');
+    const dailyPanel = document.querySelector('.daily-stats');
+    const dailyLoadError = document.getElementById('daily-load-error');
+    let displayedDate = dateSelector.value;
+    let dailyRequest = null;
+    let displayedRunsUrl = new URL(location.href);
     let runsRequest = null;
     history.replaceState({ ...history.state, seededRunsPage: true }, '', location.href);
+
+    async function loadDaily(url, addHistory) {
+        dailyRequest?.abort();
+        const request = new AbortController();
+        dailyRequest = request;
+        dailyLoadError.hidden = true;
+        dailyPanel.querySelector('.daily-content').setAttribute('aria-busy', 'true');
+        try {
+            const fetchUrl = new URL('{{ route('admin.dashboard', absolute: false) }}', location.origin);
+            if (url.searchParams.has('date')) fetchUrl.searchParams.set('date', url.searchParams.get('date'));
+            const response = await fetch(fetchUrl, { signal: request.signal });
+            if (!response.ok) throw new Error(`Request failed (${response.status})`);
+            const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+            const content = page.querySelector('.daily-content');
+            const selector = page.querySelector('#date-selector');
+            if (!content || !selector) throw new Error('Daily results are missing from the response');
+            if (request.signal.aborted) return;
+            dailyPanel.querySelector('.daily-content').replaceWith(content);
+            displayedDate = selector.value;
+            dateSelector.value = displayedDate;
+            document.getElementById('current-date').textContent = displayedDate;
+            document.getElementById('historical-label').hidden = displayedDate === '{{ $gameDate }}';
+            updateCountdown();
+            bindCardPreviews();
+            if (addHistory) {
+                const currentUrl = new URL(location.href);
+                if (displayedDate === '{{ $gameDate }}') currentUrl.searchParams.delete('date');
+                else currentUrl.searchParams.set('date', displayedDate);
+                history.pushState({ ...history.state, seededRunsPage: true }, '', currentUrl);
+            }
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            console.error('Unable to load daily results:', error);
+            dateSelector.value = displayedDate;
+            dailyLoadError.textContent = 'Could not load daily results. Please try again.';
+            dailyLoadError.hidden = false;
+        } finally {
+            if (dailyRequest === request) {
+                dailyRequest = null;
+                dailyPanel.querySelector('.daily-content').removeAttribute('aria-busy');
+            }
+        }
+    }
+
+    dateSelector.addEventListener('change', () => {
+        if (!dateSelector.value || !dateSelector.checkValidity()) {
+            dateSelector.value = displayedDate;
+            return;
+        }
+        const url = new URL(location.href);
+        if (dateSelector.value === '{{ $gameDate }}') url.searchParams.delete('date');
+        else url.searchParams.set('date', dateSelector.value);
+        loadDaily(url, true);
+    });
 
     async function loadRuns(url, addHistory) {
         runsRequest?.abort();
@@ -728,8 +783,12 @@ today
             if (!content) throw new Error('Seeded runs are missing from the response');
             if (request.signal.aborted) return;
             manageRuns.querySelector('.runs-content').replaceWith(content);
+            displayedRunsUrl = new URL(url, location.href);
             if (addHistory) {
-                history.pushState({ ...history.state, seededRunsPage: true }, '', url);
+                const currentDate = new URL(location.href).searchParams.get('date');
+                if (currentDate) displayedRunsUrl.searchParams.set('date', currentDate);
+                else displayedRunsUrl.searchParams.delete('date');
+                history.pushState({ ...history.state, seededRunsPage: true }, '', displayedRunsUrl);
                 manageRuns.querySelector('.runs-pagination')?.focus({ preventScroll: true });
             }
         } catch (error) {
@@ -758,11 +817,26 @@ today
         const link = event.target.closest('.runs-pagination a, .runs-sort-mobile, #sort-date');
         if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        loadRuns(link.href, true);
+        const url = new URL(link.href);
+        const currentDate = new URL(location.href).searchParams.get('date');
+        if (currentDate) url.searchParams.set('date', currentDate);
+        else url.searchParams.delete('date');
+        loadRuns(url.href, true);
     });
     window.addEventListener('popstate', event => {
         if (event.state?.seededRunsPage) {
-            loadRuns(location.href, false);
+            const url = new URL(location.href);
+            if ((url.searchParams.get('date') || '{{ $gameDate }}') !== displayedDate) {
+                loadDaily(url, false);
+            } else {
+                dailyRequest?.abort();
+                dateSelector.value = displayedDate;
+            }
+            if (['runs_page', 'runs_order'].some(key => url.searchParams.get(key) !== displayedRunsUrl.searchParams.get(key))) {
+                loadRuns(url.href, false);
+            } else {
+                runsRequest?.abort();
+            }
         } else {
             location.reload();
         }

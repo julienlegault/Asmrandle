@@ -63,6 +63,9 @@ counts). "Today" follows the game's 06:00 UTC rollover. The graph shows daily
 score distributions because practice scores are not stored. Daily card
 percentages come from the challenge snapshot; answer percentages are based on
 completed results in each mode.
+Scores Shared counts daily runs whose scores were successfully copied and
+recorded; practice scores cannot be shared. Older results only record copies
+of the first perfect score, so historical sharing totals are incomplete.
 
 Admins can schedule a seeded daily run by selecting a game date, 20 distinct
 playable cards in round order, a site logo (standard or pride), and optionally

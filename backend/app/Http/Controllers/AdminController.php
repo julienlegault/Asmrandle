@@ -86,6 +86,7 @@ class AdminController extends Controller
             : 0;
         
         $totalGames = DB::table('game_results')->count() + DB::table('practice_plays')->count() + self::COMPLETED_GAMES_OFFSET;
+        $totalScoresShared = DB::table('game_results')->where('score_copied', true)->count();
         $challenge = DB::table('daily_challenges')->where('date', $date)->first();
         $cards = $challenge ? json_decode($challenge->cards, true, flags: JSON_THROW_ON_ERROR) : [];
         $counts = [array_fill(0, 11, 0), array_fill(0, 11, 0)];
@@ -126,11 +127,8 @@ class AdminController extends Controller
         }
 
         // Calculate statistics for the top section
-        $todayFirstTenCopied = DB::table('game_results')
-            ->where('date', $date)
-            ->where('first_ten', true)
-            ->where('first_ten_copied', true)
-            ->exists();
+        $scoresShared = $results->where('score_copied', true)->count();
+        $firstTenCopied = $results->where('first_ten', true)->where('score_copied', true)->isNotEmpty();
 
         $perfectScoreStats = $this->getPerfectScoreStats($gameDate);
         $dailyPlaysPerDay = $this->getDailyPlaysPerDayAverage($gameDate);
@@ -139,7 +137,7 @@ class AdminController extends Controller
         return response()->view('admin.dashboard', compact(
             'date', 'gameDate', 'totalGames', 'practiceToday', 'results', 'cards', 'counts', 'correct', 'modeTotals',
             'seededRuns', 'runsOrder', 'source', 'sourceCards', 'sourceEmojis', 'editing', 'eligibleCards', 'logos',
-            'todayFirstTenCopied', 'perfectScoreStats', 'dailyPlaysPerDay', 'allTimeAverageScore', 'allCardsMap',
+            'firstTenCopied', 'scoresShared', 'totalScoresShared', 'perfectScoreStats', 'dailyPlaysPerDay', 'allTimeAverageScore', 'allCardsMap',
         ));
     }
 
