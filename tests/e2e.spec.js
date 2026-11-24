@@ -198,6 +198,44 @@ test.describe('Asmrandle E2E Tests', () => {
         await expect(page.locator('.scoreboard .dot')).toHaveCount(10);
     });
 
+    for (const mode of ['daily', 'practice']) {
+        test(`${mode} run reports its completion time and preserves it on retry`, async ({ page }) => {
+            const date = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
+            const submissions = [];
+            await page.route(BASE_URL + '/', route => route.fulfill({
+                contentType: 'text/html',
+                body: fs.readFileSync(path.join(__dirname, '../frontend/index.html'), 'utf8'),
+            }));
+            await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: true, logo: 'standard' } }));
+            await page.route('**/api/games', route => route.fulfill({ json: { id: mode === 'daily' ? date : 'practice', date, logo: 'standard' } }));
+            await page.route('**/api/results/today', route => route.fulfill({ status: 404 }));
+            await page.route('**/api/games/*/rounds/*', route => route.fulfill({ json: { cards: [
+                { name: 'first', popularity: 80, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+                { name: 'second', popularity: 20, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+            ] } }));
+            await page.route('**/api/results', route => {
+                submissions.push(route.request().postDataJSON());
+                return submissions.length === 1
+                    ? route.fulfill({ status: 500 })
+                    : route.fulfill({ json: { firstTen: false } });
+            });
+            await page.goto(BASE_URL + '/');
+            await page.click(mode === 'daily' ? '#start-daily' : '#play-random');
+            for (let i = 0; i < 10; i++) {
+                await page.locator('#game .card').first().click();
+                await page.waitForSelector('.overlay', { state: 'hidden' });
+            }
+            await expect(page.getByText('Could not save your results.')).toBeVisible();
+            await page.getByRole('button', { name: 'Retry' }).click();
+            await expect(page.locator('#result')).toBeVisible();
+            expect(submissions).toHaveLength(2);
+            expect(submissions[0].mode).toBe(mode);
+            expect(submissions[0].durationMs).toBeGreaterThanOrEqual(0);
+            expect(submissions[0].durationMs).toBeLessThan(60000);
+            expect(submissions[1].durationMs).toBe(submissions[0].durationMs);
+        });
+    }
+
     test('Game cards load and are clickable', async ({ page }) => {
         await page.goto(BASE_URL);
         

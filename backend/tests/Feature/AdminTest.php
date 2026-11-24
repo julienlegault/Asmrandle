@@ -202,7 +202,7 @@ class AdminTest extends TestCase
         $response->assertViewHas('allTimeAverageScore', 9.625);
 
         // Check displayed text
-        $response->assertSee('First 10 copied today');
+        $response->assertSee('First 10 copied');
         $response->assertSee('Scores Shared');
         $response->assertSee('Days with no perfect 10s');
         $response->assertSee('1');
@@ -215,10 +215,76 @@ class AdminTest extends TestCase
         $this->withSession($session)->get('/admin?date=2026-03-18')->assertOk()
             ->assertViewHas('firstTenCopied', false)->assertViewHas('scoresShared', 1)
             ->assertViewHas('totalScoresShared', 3)
-            ->assertSee('First 10 copied on 2026-03-18: <strong>—</strong>', false)
-            ->assertSee('Scores Shared: <strong>1</strong>', false);
+            ->assertSee('<div class="stat-label">First 10 copied</div><strong>—</strong>', false)
+            ->assertSee('<div class="stat-label">Scores Shared</div><strong>1</strong>', false);
         $this->withSession($session)->get('/admin?date=2026-03-17')->assertOk()
             ->assertViewHas('firstTenCopied', false)->assertViewHas('scoresShared', 0);
+    }
+
+    public function test_speedy_runs_count_only_recorded_durations_under_one_minute_across_modes_and_dates(): void
+    {
+        Carbon::setTestNow('2026-03-20 12:00:00 UTC');
+        $hash = Hash::make('a-long-password');
+        $id = DB::table('admin_accounts')->insertGetId([
+            'username' => 'admin', 'password' => $hash, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        foreach ([59999, 60000, null] as $duration) {
+            DB::table('game_results')->insert([
+                'submission_id' => (string) Str::uuid(), 'date' => '2026-03-19', 'hard_mode' => false,
+                'score' => 0, 'first_ten' => false, 'answers' => json_encode(array_fill(0, 10, false)),
+                'duration_ms' => $duration, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            DB::table('practice_plays')->insert(['duration_ms' => $duration, 'created_at' => now()]);
+        }
+
+        $session = ['admin' => ['id' => $id, 'password_hash' => $hash]];
+        foreach (['/admin', '/admin?date=2026-03-18'] as $url) {
+            $this->withSession($session)->get($url)->assertOk()
+                ->assertViewHas('allTimeDurations', ['speedy' => 2, 'fastest' => 59999, 'average' => 59999.5])
+                ->assertSee('<div class="stat-label">Speedy Runs</div>', false);
+        }
+    }
+
+    public function test_duration_statistics_follow_selected_game_day_and_exclude_missing_durations(): void
+    {
+        Carbon::setTestNow('2026-03-20 12:00:00 UTC');
+        $hash = Hash::make('a-long-password');
+        $id = DB::table('admin_accounts')->insertGetId([
+            'username' => 'admin', 'password' => $hash, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $session = ['admin' => ['id' => $id, 'password_hash' => $hash]];
+        $this->withSession($session)->get('/admin')->assertOk()
+            ->assertViewHas('dailyDurations', ['speedy' => 0, 'fastest' => null, 'average' => null])
+            ->assertViewHas('allTimeDurations', ['speedy' => 0, 'fastest' => null, 'average' => null])
+            ->assertSee('<div class="stat-label">Average Run Duration</div>
+                <strong class="duration-value">—</strong>', false);
+
+        foreach ([['2026-03-19', 59999], ['2026-03-19', 60000], ['2026-03-18', 120000], ['2026-03-19', null]] as [$date, $duration]) {
+            DB::table('game_results')->insert([
+                'submission_id' => (string) Str::uuid(), 'date' => $date, 'hard_mode' => false,
+                'score' => 0, 'first_ten' => false, 'answers' => json_encode(array_fill(0, 10, false)),
+                'duration_ms' => $duration, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+        foreach ([
+            ['2026-03-19 05:59:59', 0], ['2026-03-19 06:00:00', 45000],
+            ['2026-03-20 05:59:59', 80000], ['2026-03-20 06:00:00', 10000],
+            ['2026-03-19 06:00:00', null],
+        ] as [$createdAt, $duration]) {
+            DB::table('practice_plays')->insert(['created_at' => $createdAt, 'duration_ms' => $duration]);
+        }
+
+        $this->withSession($session)->get('/admin?date=2026-03-19')->assertOk()
+            ->assertViewHas('practiceToday', 3)
+            ->assertViewHas('dailyDurations', ['speedy' => 2, 'fastest' => 45000, 'average' => 61249.75])
+            ->assertViewHas('allTimeDurations', ['speedy' => 4, 'fastest' => 0, 'average' => 374999 / 7])
+            ->assertSee('<div class="stat-label">Fastest Run</div><strong class="duration-value">45.000 s</strong>', false)
+            ->assertSee('<strong class="duration-value">53.571 s</strong>', false);
+        $this->withSession($session)->get('/admin?date=2026-03-18')->assertOk()
+            ->assertViewHas('dailyDurations', ['speedy' => 1, 'fastest' => 0, 'average' => 60000])
+            ->assertSee('<div class="stat-label">Fastest Run</div><strong class="duration-value">0.000 s</strong>', false);
+        $this->withSession($session)->get('/admin')->assertOk()
+            ->assertViewHas('dailyDurations', ['speedy' => 1, 'fastest' => 10000, 'average' => 10000]);
     }
 
     public function test_share_flag_migration_preserves_existing_values(): void

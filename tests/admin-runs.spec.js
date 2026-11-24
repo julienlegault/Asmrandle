@@ -28,6 +28,7 @@ function renderDashboard(query = '') {
                 'date' => $gameDate->copy()->addDays($offset)->toDateString(),
                 'hard_mode' => false, 'score' => $offset === -1 ? 10 : 9,
                 'first_ten' => $offset === -1, 'score_copied' => true,
+                'duration_ms' => $offset === -1 ? 42000 : 65000,
                 'answers' => json_encode(array_fill(0, 10, true)),
                 'created_at' => now(), 'updated_at' => now(),
             ]);
@@ -78,6 +79,17 @@ test('changing dates updates daily results without losing editor state and suppo
     await page.setViewportSize({ width: 1200, height: 800 });
     const daily = page.locator('.daily-stats');
     const editor = page.locator('#seeded-editor');
+    const cards = daily.locator('.daily-summary .stat');
+    const labels = ['Daily games', 'Practice games', 'First 10 copied', 'Scores Shared', 'Speedy Runs', 'Fastest Run'];
+    await expect(cards.locator('.stat-label')).toHaveText(labels);
+    await expect(cards.locator('strong')).toHaveText(['0', '0', '—', '0', '0', '—']);
+    expect((await daily.locator('.daily-summary').boundingBox()).y).toBeLessThan((await daily.locator('.chart').boundingBox()).y);
+    await expect(page.locator('.all-time-stats .stat-label')).toHaveText([
+        'Completed games, all time', 'Scores Shared', 'Speedy Runs', 'Fastest Run', 'Average Run Duration', 'Days with no perfect 10s',
+        'Daily plays per day', 'All-time average score',
+    ]);
+    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Fastest Run' }).locator('strong')).toHaveText('42.000 s');
+    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Average Run Duration' }).locator('strong')).toHaveText('53.500 s');
     await expect(daily.locator('.chart > .bar-group')).toHaveCount(11);
     await expect(daily.locator('.chart > .bar-group > .bars > .bar.regular')).toHaveCount(11);
     await expect(daily.locator('.chart > .bar-group > .bars > .bar.hard')).toHaveCount(11);
@@ -90,8 +102,9 @@ test('changing dates updates daily results without losing editor state and suppo
     await page.locator('#seeded-card-input').fill('unfinished selection');
     await page.evaluate(() => { window.dashboardMarker = true; });
     await page.locator('#date-selector').fill(yesterday);
-    await expect(page.locator('.daily-content')).toContainText('First 10 copied on ' + yesterday + ': ✓');
-    await expect(page.locator('.daily-content')).toContainText('Scores Shared: 1');
+    await expect(cards.locator('.stat-label')).toHaveText(labels);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.000 s']);
+    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Average Run Duration' }).locator('strong')).toHaveText('53.500 s');
     await expect(page.locator('#current-date')).toHaveText(yesterday);
     await expect(page.locator('#seeded-card-input')).toHaveValue('unfinished selection');
     await expect(editor).toBeVisible();
@@ -100,14 +113,14 @@ test('changing dates updates daily results without losing editor state and suppo
     expect(await page.evaluate(() => window.dashboardMarker)).toBe(true);
 
     await page.locator('#date-selector').fill(older);
-    await expect(page.locator('.daily-content')).toContainText('First 10 copied on ' + older + ': —');
-    await expect(page.locator('.daily-content')).toContainText('Scores Shared: 1');
+    await expect(cards.locator('.stat-label')).toHaveText(labels);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.000 s']);
     await page.goBack();
     await expect(page.locator('#date-selector')).toHaveValue(yesterday);
-    await expect(page.locator('.daily-content')).toContainText('First 10 copied on ' + yesterday + ': ✓');
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.000 s']);
     await page.goForward();
     await expect(page.locator('#date-selector')).toHaveValue(older);
-    await expect(page.locator('.daily-content')).toContainText('First 10 copied on ' + older + ': —');
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.000 s']);
 
     fail = true;
     await page.locator('#date-selector').fill(today);
@@ -124,7 +137,7 @@ test('changing dates updates daily results without losing editor state and suppo
     try {
         await page.goBack();
         await expect(page.locator('#date-selector')).toHaveValue(today);
-        await expect(page.locator('.daily-content')).toContainText('First 10 copied today: —');
+        await expect(cards.locator('strong')).toHaveText(['0', '0', '—', '0', '0', '—']);
     } finally {
         release();
     }

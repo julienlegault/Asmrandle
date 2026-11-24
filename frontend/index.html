@@ -755,10 +755,12 @@
     let gameId = null;
     let fastModeAvailable = false;
     let submissionId = null;
+    let gameStartedAt = null;
+    let gameStartTime = null;
+    let gameDurationMs = null;
     let perfectScoreEmojis = null;
     let copyToastTimeout = null;
     let logoVariant = 'standard';
-    let gameStartedAt = null;
     const logos = {
       standard: { splash: '/images/Logo-Splash.png', play: '/images/Logo-Play.png' },
       pride: { splash: '/images/Logo-Splash-Pride.png', play: '/images/Logo-Play-Pride.png' }
@@ -1228,10 +1230,12 @@
       cardData = [];
       resultArray = [];
       submissionId = null;
+      gameStartedAt = null;
+      gameStartTime = null;
+      gameDurationMs = null;
       currentPair = 0;
       correctCount = 0;
       gameType = 0;
-      gameStartedAt = null;
       perfectScoreEmojis = null;
       scoreboard.innerHTML = "";
       gameError.textContent = "";
@@ -1315,6 +1319,7 @@
           dot.className = "dot";
           scoreboard.appendChild(dot);
         }
+        gameStartTime = performance.now();
         showNextPair();
       } catch (error) {
         console.error(error);
@@ -1338,6 +1343,7 @@
             hardMode,
             answers: resultArray,
             submissionId,
+            durationMs: gameDurationMs,
             startedAt: gameStartedAt
           })
         });
@@ -1504,6 +1510,9 @@
       };
 
       currentPair++;
+      if (currentPair === 10) {
+        gameDurationMs = Math.min(Math.floor(performance.now() - gameStartTime), 2147483647);
+      }
       const startWait = Date.now();
       const next = async () => {
         try {
@@ -1524,7 +1533,6 @@
   </script>
 </body>
 </html>
-
 
 
 
