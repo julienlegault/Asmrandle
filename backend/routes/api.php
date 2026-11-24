@@ -17,15 +17,16 @@ Route::middleware('throttle:120,1')->group(function () {
     Route::post('/games', function (Request $request, GameService $games) {
         $data = $request->validate(['mode' => 'required|in:daily,practice']);
         $date = $games->gameDate();
+        $startedAt = now()->format('Y-m-d\TH:i:s.v\Z');
         if ($data['mode'] === 'daily') {
             $games->daily($date);
 
             $emojis = DB::table('daily_challenges')->where('date', $date)->value('perfect_score_emojis');
 
-            return ['id' => $date, 'date' => $date, 'logo' => $games->logoForDate($date), 'perfectScoreEmojis' => $emojis ? json_decode($emojis, true, flags: JSON_THROW_ON_ERROR) : null];
+            return ['id' => $date, 'date' => $date, 'logo' => $games->logoForDate($date), 'perfectScoreEmojis' => $emojis ? json_decode($emojis, true, flags: JSON_THROW_ON_ERROR) : null, 'startedAt' => $startedAt];
         }
 
-        return ['id' => $games->practice(), 'date' => $date, 'logo' => $games->logoForDate($date)];
+        return ['id' => $games->practice(), 'date' => $date, 'logo' => $games->logoForDate($date), 'startedAt' => $startedAt];
     });
 
     Route::get('/games/{id}/rounds/{round}', function (string $id, int $round, GameService $games) {
@@ -69,6 +70,7 @@ Route::middleware('throttle:120,1')->group(function () {
             'answers' => 'required|array|size:10',
             'answers.*' => 'required|boolean',
             'submissionId' => 'required|uuid',
+            'startedAt' => 'required|date_format:Y-m-d\TH:i:s.v\Z',
         ]);
         if ($data['mode'] === 'practice') {
             DB::table('practice_plays')->insert(['created_at' => now()]);
@@ -119,6 +121,7 @@ Route::middleware('throttle:120,1')->group(function () {
                 'score' => $score,
                 'first_ten' => $firstTen,
                 'answers' => json_encode($data['answers'], JSON_THROW_ON_ERROR),
+                'started_at' => \Illuminate\Support\Carbon::parse($data['startedAt']),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -152,6 +155,13 @@ Route::middleware('throttle:120,1')->group(function () {
 
         abort_unless($result, 404, 'No result found for today on this device.');
 
+        $elapsedSeconds = null;
+        if ($result->started_at && $result->created_at) {
+            $start = \Illuminate\Support\Carbon::parse($result->started_at);
+            $end = \Illuminate\Support\Carbon::parse($result->created_at);
+            $elapsedSeconds = round(abs($end->diffInMilliseconds($start)) / 1000, 1);
+        }
+
         return [
             'score' => (int) $result->score,
             'hardMode' => (bool) $result->hard_mode,
@@ -160,6 +170,7 @@ Route::middleware('throttle:120,1')->group(function () {
             'answers' => json_decode($result->answers, true),
             'submissionId' => $result->submission_id,
             'date' => $result->date,
+            'elapsedSeconds' => $elapsedSeconds,
         ];
     });
 
@@ -174,6 +185,13 @@ Route::middleware('throttle:120,1')->group(function () {
 
         abort_unless($result, 404, 'Result not found.');
 
+        $elapsedSeconds = null;
+        if ($result->started_at && $result->created_at) {
+            $start = \Illuminate\Support\Carbon::parse($result->started_at);
+            $end = \Illuminate\Support\Carbon::parse($result->created_at);
+            $elapsedSeconds = round(abs($end->diffInMilliseconds($start)) / 1000, 1);
+        }
+
         return [
             'score' => (int) $result->score,
             'hardMode' => (bool) $result->hard_mode,
@@ -181,6 +199,7 @@ Route::middleware('throttle:120,1')->group(function () {
             'scoreCopied' => (bool) $result->score_copied,
             'answers' => json_decode($result->answers, true),
             'date' => $result->date,
+            'elapsedSeconds' => $elapsedSeconds,
         ];
     });
 });
