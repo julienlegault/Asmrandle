@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -172,7 +174,66 @@ class GameApiTest extends TestCase
             $this->assertSame(503, $exception->response->status());
         }
         $this->assertSame(40, DB::table('cards')->where('slug', 'card-0')->value('inclusion'));
+        $this->assertSame(2, DB::table('cards')->where('slug', 'card-1')->value('inclusion'));
         $this->assertNull(DB::table('cards')->where('slug', 'card-1')->value('edhrec_checked_at'));
+        $this->assertNull(DB::table('cards')->where('slug', 'card-1')->value('edhrec_missing_since'));
+    }
+
+    public function test_failed_request_for_missing_card_starts_the_month_cutoff(): void
+    {
+        Carbon::setTestNow('2026-03-16 07:00:00 UTC');
+        DB::table('cards')->where('id', '>', 1)->update(['legal' => false]);
+        DB::table('cards')->where('id', 1)->update(['inclusion' => null, 'potential_decks' => null]);
+        Http::fake(['*' => Http::response('Temporary failure', 503)]);
+
+        try {
+            $this->artisan('cards:refresh-edhrec', ['--partial' => true]);
+            $this->fail('The refresh should fail on a server error.');
+        } catch (RequestException $exception) {
+            $this->assertSame(503, $exception->response->status());
+        }
+        $missingSince = DB::table('cards')->where('id', 1)->value('edhrec_missing_since');
+        $this->assertNotNull($missingSince);
+        $this->assertNotNull(DB::table('cards')->where('id', 1)->value('edhrec_checked_at'));
+
+        Carbon::setTestNow('2026-04-16 07:00:00 UTC');
+        $this->artisan('cards:refresh-edhrec', ['--partial' => true])->assertSuccessful();
+        Http::assertSentCount(1);
+        try {
+            $this->artisan('cards:refresh-edhrec');
+            $this->fail('The full refresh should retry the missing card.');
+        } catch (RequestException $exception) {
+            $this->assertSame(503, $exception->response->status());
+        }
+        Http::assertSentCount(2);
+        $this->assertSame($missingSince, DB::table('cards')->where('id', 1)->value('edhrec_missing_since'));
+    }
+
+    public function test_connection_failure_for_missing_card_is_tracked(): void
+    {
+        DB::table('cards')->where('id', '>', 1)->update(['legal' => false]);
+        DB::table('cards')->where('id', 1)->update(['inclusion' => null, 'potential_decks' => null]);
+        Http::fake(['*' => Http::failedConnection('Connection failed')]);
+
+        try {
+            $this->artisan('cards:refresh-edhrec', ['--partial' => true]);
+            $this->fail('The refresh should fail on a connection error.');
+        } catch (ConnectionException $exception) {
+            $this->assertStringContainsString('Connection failed', $exception->getMessage());
+        }
+        $this->assertNotNull(DB::table('cards')->where('id', 1)->value('edhrec_missing_since'));
+    }
+
+    public function test_missing_response_preserves_previously_available_card(): void
+    {
+        DB::table('cards')->where('id', '>', 1)->update(['legal' => false]);
+        Http::fake(['*' => Http::response('', 404)]);
+
+        $this->artisan('cards:refresh-edhrec')->assertFailed();
+        $card = DB::table('cards')->where('id', 1)->first();
+        $this->assertSame(1, $card->inclusion);
+        $this->assertNull($card->edhrec_missing_since);
+        $this->assertNull($card->edhrec_checked_at);
     }
 
     public function test_edhrec_access_denial_does_not_erase_existing_data(): void
@@ -196,6 +257,149 @@ class GameApiTest extends TestCase
         ]);
         $this->artisan('cards:refresh-edhrec')->assertSuccessful();
         $this->assertNotNull(DB::table('cards')->where('id', 1)->value('edhrec_checked_at'));
+    }
+
+    public function test_partial_edhrec_refresh_samples_five_percent_and_retries_recent_missing_cards(): void
+    {
+        Carbon::setTestNow('2026-03-16 07:00:00 UTC');
+        DB::table('cards')->where('slug', 'card-20')->update(['legal' => false]);
+        DB::table('cards')->whereIn('slug', ['card-21', 'card-22'])->update([
+            'inclusion' => null, 'potential_decks' => null,
+        ]);
+        DB::table('cards')->where('slug', 'card-23')->update([
+            'inclusion' => null, 'potential_decks' => null,
+            'edhrec_missing_since' => now()->subMonth(),
+        ]);
+        Http::fake([
+            '*/card-21.json' => Http::response('', 404),
+            '*/card-22.json' => Http::response('', 404),
+            '*' => Http::response(['container' => ['json_dict' => ['card' => [
+                'num_decks' => 40, 'potential_decks' => 200,
+            ]]]]),
+        ]);
+
+        $this->artisan('cards:refresh-edhrec', ['--partial' => true])->assertSuccessful();
+
+        $sample = json_decode(DB::table('edhrec_refresh_samples')->value('card_ids'), true);
+        $this->assertCount(2, $sample);
+        Http::assertSentCount(4);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/card-23.json'));
+        $this->assertNotNull(DB::table('cards')->where('slug', 'card-21')->value('edhrec_missing_since'));
+
+        $this->artisan('cards:refresh-edhrec', ['--partial' => true])->assertSuccessful();
+        Http::assertSentCount(4);
+        $this->assertSame($sample, json_decode(DB::table('edhrec_refresh_samples')->value('card_ids'), true));
+    }
+
+    public function test_missing_cards_stop_partial_retries_after_a_month_but_full_refresh_checks_them(): void
+    {
+        Carbon::setTestNow('2026-03-16 07:00:00 UTC');
+        DB::table('cards')->where('id', '>', 1)->update(['legal' => false]);
+        DB::table('cards')->where('id', 1)->update(['inclusion' => null, 'potential_decks' => null]);
+        Http::fake(['*' => Http::response('', 404)]);
+
+        $this->artisan('cards:refresh-edhrec', ['--partial' => true])->assertSuccessful();
+        Http::assertSentCount(1);
+        $missingSince = DB::table('cards')->where('id', 1)->value('edhrec_missing_since');
+
+        Carbon::setTestNow('2026-04-15 07:00:00 UTC');
+        $this->artisan('cards:refresh-edhrec', ['--partial' => true])->assertSuccessful();
+        Http::assertSentCount(2);
+        $this->assertSame($missingSince, DB::table('cards')->where('id', 1)->value('edhrec_missing_since'));
+
+        Carbon::setTestNow('2026-04-16 07:00:00 UTC');
+        $this->artisan('cards:refresh-edhrec', ['--partial' => true])->assertSuccessful();
+        Http::assertSentCount(2);
+
+        $this->artisan('cards:refresh-edhrec')->assertSuccessful();
+        Http::assertSentCount(3);
+        $this->assertSame($missingSince, DB::table('cards')->where('id', 1)->value('edhrec_missing_since'));
+    }
+
+    public function test_successful_full_refresh_clears_the_missing_since_date(): void
+    {
+        DB::table('cards')->where('id', '>', 1)->update(['legal' => false]);
+        DB::table('cards')->where('id', 1)->update([
+            'inclusion' => null, 'potential_decks' => null, 'edhrec_missing_since' => now()->subMonths(2),
+        ]);
+        Http::fake(['*' => Http::response(['container' => ['json_dict' => ['card' => [
+            'num_decks' => 40, 'potential_decks' => 200,
+        ]]]])]);
+
+        $this->artisan('cards:refresh-edhrec')->assertSuccessful();
+        $this->assertNull(DB::table('cards')->where('id', 1)->value('edhrec_missing_since'));
+        $this->assertSame(40, DB::table('cards')->where('id', 1)->value('inclusion'));
+    }
+
+    public function test_missing_card_retry_cutoff_handles_shorter_months(): void
+    {
+        Carbon::setTestNow('2026-02-28 07:00:00 UTC');
+        DB::table('cards')->where('id', '>', 1)->update(['legal' => false]);
+        DB::table('cards')->where('id', 1)->update([
+            'inclusion' => null, 'potential_decks' => null, 'edhrec_missing_since' => '2026-01-31 07:00:00',
+        ]);
+        Http::fake(['*' => Http::response('', 404)]);
+
+        $this->artisan('cards:refresh-edhrec', ['--partial' => true])->assertSuccessful();
+        Http::assertNothingSent();
+    }
+
+    public function test_partial_refresh_retry_keeps_the_same_random_sample(): void
+    {
+        $attempts = 0;
+        $fail = true;
+        Http::fake(function () use (&$attempts, &$fail) {
+            $attempts++;
+            if ($fail && $attempts === 2) {
+                return Http::response('Temporary failure', 503);
+            }
+
+            return Http::response(['container' => ['json_dict' => ['card' => [
+                'num_decks' => 40, 'potential_decks' => 200,
+            ]]]]);
+        });
+
+        try {
+            $this->artisan('cards:refresh-edhrec', ['--partial' => true]);
+            $this->fail('The refresh should fail on a server error.');
+        } catch (RequestException $exception) {
+            $this->assertSame(503, $exception->response->status());
+        }
+        $sample = DB::table('edhrec_refresh_samples')->value('card_ids');
+        $fail = false;
+        $this->artisan('cards:refresh-edhrec', ['--partial' => true])->assertSuccessful();
+
+        $this->assertSame($sample, DB::table('edhrec_refresh_samples')->value('card_ids'));
+        Http::assertSentCount(3);
+        $this->assertSame(2, DB::table('cards')->whereNotNull('edhrec_checked_at')->count());
+    }
+
+    public function test_edhrec_refresh_fails_if_another_refresh_is_running(): void
+    {
+        $lock = Cache::lock('edhrec-refresh', 86400);
+        $this->assertTrue($lock->get());
+        Http::fake();
+
+        try {
+            $this->artisan('cards:refresh-edhrec', ['--partial' => true])->assertFailed();
+            Http::assertNothingSent();
+        } finally {
+            $lock->release();
+        }
+    }
+
+    public function test_scryfall_import_fails_if_another_import_is_running(): void
+    {
+        $lock = Cache::lock('scryfall-import', 86400);
+        $this->assertTrue($lock->get());
+        Http::fake();
+
+        try {
+            $this->artisan('cards:import')->assertFailed();
+            Http::assertNothingSent();
+        } finally {
+            $lock->release();
+        }
     }
 
     public function test_first_ten_can_be_marked_as_copied(): void

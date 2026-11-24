@@ -86,30 +86,98 @@ it creates and deletes runs dated 2099-12-30 and 2099-12-31.
 
 ## Data refresh and Google Cloud
 
-The production scheduler runs `cards:import` on the first of each month at
-02:00 UTC and `cards:refresh-edhrec` daily at 07:00 UTC. The latter makes one
-request per legal card with a 200 ms delay; a full run can take hours. It saves
-progress per card so a failed run can be resumed with the same command. HTTP
-errors fail the command rather than replacing good data. Previously created
-daily snapshots are never modified by refreshes.
+**Before enabling EDHREC jobs:** EDHREC's
+[terms](https://edhrec.com/terms) restrict automated requests and reuse. Obtain
+authorization or clarify the applicable terms with EDHREC first.
 
-The root `Dockerfile` builds the web image for Cloud Run. Configure a persistent
-Cloud SQL MySQL database, `APP_ENV=production`, `APP_DEBUG=false`, a securely
-generated `APP_KEY`, and the appropriate `DB_*`/`DB_SOCKET` settings via Secret
-Manager or environment configuration. Set `CACHE_STORE=database` so scheduler
-locks are shared across instances. Run `php backend/artisan migrate --force`,
-then `php backend/artisan cards:import` and
-`php backend/artisan cards:refresh-edhrec` before serving traffic. Production
-has no synthetic popularity data and needs at least 20 eligible cards.
+The web container does not import or refresh card data. Run these commands in
+separate Cloud Run Jobs:
 
-Laravel's schedule still needs an external trigger: on a VM run
-`php /path/to/backend/artisan schedule:run` every minute via cron. For Cloud
-Run, configure Cloud Scheduler to execute a Cloud Run Job using the same image
-and database settings, overriding its command to
-`php backend/artisan schedule:run` every minute. Give the job a timeout long
-enough for a complete EDHRec refresh and monitor failures. Creating the Google
-Cloud resources, secrets, IAM permissions and deployment is not automated by
-this repository.
+| Job | Artisan arguments | Cloud Scheduler frequency (UTC) |
+| --- | --- | --- |
+| Database migration | `migrate --force` | Manual only |
+| Scryfall import | `cards:import` | `0 2 1 * *` (monthly, 1st at 02:00) |
+| Full EDHREC refresh | `cards:refresh-edhrec` | `0 7 * * 0` (Sunday at 07:00) |
+| Partial EDHREC refresh | `cards:refresh-edhrec --partial` | `0 7 * * 1-6` (Monday-Saturday at 07:00) |
+
+The partial job randomly selects up to 5% of the total legal catalog (rounded
+up), sampling cards with existing EDHREC data, and additionally checks every
+legal card without data. After a card has been continuously missing for one
+calendar month from its first missing response or failed request, partial jobs
+stop checking it; the weekly full job still checks it. A successful response
+clears the missing period. For cards with existing data, failures preserve that
+data and do not start a missing period. Failed requests still fail the job and
+are reported in its logs. Existing missing cards start their month on their
+first missing response or failed request after the migration.
+
+Each EDHREC request has a 200 ms delay, so full runs can take hours. The daily
+sample and per-card progress are saved for same-day retries. A shared database
+cache lock prevents full and partial jobs from running concurrently, and a
+separate lock prevents duplicate Scryfall imports. A force-terminated job can
+leave its lock in place for up to 24 hours. Previously created game snapshots
+are not modified by refreshes. The monthly Scryfall import and EDHREC jobs
+retain the last good data on request errors.
+
+### Cloud Run setup in the Google Cloud console
+
+These resources are not automatically created or deployed by this repository.
+Console labels can change; see Google's
+[job creation](https://cloud.google.com/run/docs/create-jobs) and
+[scheduled jobs](https://cloud.google.com/run/docs/execute/jobs-on-schedule)
+documentation.
+
+1. Build and push an image from the root `Dockerfile` containing these changes.
+   The web service still performs database setup, but no card import.
+2. Enable the **Cloud Run**, **Cloud Scheduler**, **Cloud SQL Admin** and
+   **Secret Manager** APIs as needed. Ensure the project has a persistent
+   Cloud SQL MySQL database and the web service uses `APP_ENV=production`,
+   `APP_DEBUG=false`, a secure `APP_KEY`, and its `DB_*` settings. Keep secrets
+   in Secret Manager. The jobs must connect to the **same database**.
+3. In **IAM & Admin > Service Accounts**, use or create a runtime service
+   account for the jobs. Grant it **Cloud SQL Client** and permission to access
+   the required secrets. If using private IP, configure the same VPC
+   connectivity as the web service.
+4. In **Cloud Run > Jobs**, click **Deploy container**. Create each of the
+   four jobs in the table above, using the new image and the same region as
+   the service. For each job:
+   - Set **Tasks** to `1`; under **Containers, Connections, Security** set the
+     container command to `php` and supply `backend/artisan` followed by the
+     job's Artisan arguments as separate arguments. This overrides the image's
+     web entrypoint, so the job does not start Apache or run startup setup.
+   - Set the runtime service account and Cloud SQL connection. Copy the
+     service's `APP_ENV`, `APP_KEY`, `DB_CONNECTION`, `DB_DATABASE`,
+     `DB_USERNAME`, `DB_PASSWORD`, `DB_SOCKET` (and any other needed `DB_*`)
+     settings, using Secret Manager references for secrets. For a Cloud SQL
+     Unix socket, `DB_SOCKET` is `/cloudsql/PROJECT:REGION:INSTANCE`.
+   - Set `CACHE_STORE=database` and use the same cache database and prefix for
+     all refresh jobs. Set task timeout to **20 hours** and retries to **0**;
+     monitor failures and retry manually. A full run must finish within that
+     timeout. Do not configure multiple tasks.
+5. Execute the migration job manually. In **Cloud Run > Jobs**, check its
+   execution status and logs to confirm success before running any refresh
+   jobs. Then deploy the new image to the web service.
+6. For a new empty database, execute the Scryfall job manually first. Once
+   authorized, execute the full EDHREC job manually and wait for it to succeed
+   before serving traffic: at least 20 legal cards with EDHREC data are needed.
+7. Create a scheduler trigger for the Scryfall job and, **after obtaining
+   EDHREC authorization**, the two EDHREC jobs. For each, open the job, select
+   **Triggers > Add Scheduler Trigger**, enter the matching cron expression
+   from the table, and choose timezone **UTC**. Choose a Scheduler service
+   account with **Cloud Run Invoker** on the job. Grant the person creating the
+   trigger permission to use that service account. The EDHREC triggers
+   intentionally never run on the same scheduled day. Do not schedule the
+   migration job.
+8. Check job execution status and logs, and set alerts for failures and data
+   becoming stale. After authorization, test the partial job on a non-Sunday
+   and verify its log reports the number of cards refreshed.
+9. When deploying a new image, update **each job's image** as well as the web
+   service. The job image is not updated automatically with the service.
+
+For existing deployments, disable any old external triggers running
+`schedule:run` for card refreshes and avoid duplicate job triggers. The
+remaining Laravel schedule only cleans up old practice games; if desired,
+continue running `schedule:run` every minute in a separate scheduled job for
+that cleanup. It no longer refreshes cards.
 
 CI runs the backend and browser tests but does not deploy to GitHub Pages:
 the application now requires a running backend.

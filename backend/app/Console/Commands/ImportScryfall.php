@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -21,6 +22,28 @@ class ImportScryfall extends Command
             return self::FAILURE;
         }
 
+        if (app()->environment('production') && config('cache.default') !== 'database') {
+            $this->error('Scryfall import requires the shared database cache in production.');
+
+            return self::FAILURE;
+        }
+
+        $lock = Cache::lock('scryfall-import', 86400);
+        if (! $lock->get()) {
+            $this->error('Another Scryfall import is already running.');
+
+            return self::FAILURE;
+        }
+
+        try {
+            return $this->downloadAndImport();
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function downloadAndImport(): int
+    {
         $headers = ['User-Agent' => 'Asmrandle/1.0 (https://asmrandle.com)', 'Accept' => 'application/json'];
         $bulk = Http::withHeaders($headers)->timeout(30)->get('https://api.scryfall.com/bulk-data')->throw()->json('data');
         $oracle = collect($bulk)->firstWhere('type', 'oracle_cards');
