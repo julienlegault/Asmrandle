@@ -25,7 +25,10 @@
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
         .stat { background: #1a1d26; border-radius: .4rem; padding: 1rem; text-align: center; }
         .stat strong { display: block; font-size: 1.8rem; margin-top: 0.5rem; }
+        .stat strong.duration-value { font-size: 1.25rem; overflow-wrap: anywhere; }
         .stat-label { font-size: 0.9rem; color: #c3c6d1; }
+        .daily-summary { margin: 1rem 0; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+        .daily-legend { display: flex; gap: 1rem; margin-bottom: 1rem; font-size: 0.9rem; }
         
         /* Two-column layout for daily stats and schedule run */
         .content-row { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
@@ -156,6 +159,18 @@
                 <strong>{{ number_format($totalScoresShared) }}</strong>
             </div>
             <div class="stat">
+                <div class="stat-label">Speedy Runs</div>
+                <strong>{{ number_format($allTimeDurations['speedy']) }}</strong>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Fastest Run</div>
+                <strong class="duration-value">{{ $allTimeDurations['fastest'] === null ? '—' : number_format($allTimeDurations['fastest'] / 1000, 3).' s' }}</strong>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Average Run Duration</div>
+                <strong class="duration-value">{{ $allTimeDurations['average'] === null ? '—' : number_format($allTimeDurations['average'] / 1000, 3).' s' }}</strong>
+            </div>
+            <div class="stat">
                 <div class="stat-label">Days with no perfect 10s</div>
                 <strong>{{ $perfectScoreStats['noPerfects'] }}/{{ $perfectScoreStats['totalDays'] }} <span class="muted">({{ number_format($perfectScoreStats['percentage'], 1) }}%)</span></strong>
             </div>
@@ -168,6 +183,7 @@
                 <strong>{{ number_format($allTimeAverageScore, 2) }}</strong>
             </div>
         </div>
+        <p class="muted">Duration statistics include recorded daily and practice games; older games without timing are excluded. Speedy Runs are under 60 seconds.</p>
     </div>
     
     <!-- Two-column content: Daily stats and Schedule run -->
@@ -183,25 +199,17 @@
             </div>
             <p id="daily-load-error" class="errors" role="alert" hidden></p>
             <div class="daily-content">
-            <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; font-size: 0.9rem;">
+            <div class="stats-grid daily-summary">
+                <div class="stat"><div class="stat-label">Daily games</div><strong>{{ number_format($results->count()) }}</strong></div>
+                <div class="stat"><div class="stat-label">Practice games</div><strong>{{ number_format($practiceToday) }}</strong></div>
+                <div class="stat"><div class="stat-label">First 10 copied</div><strong>{{ $firstTenCopied ? '✓' : '—' }}</strong></div>
+                <div class="stat"><div class="stat-label">Scores Shared</div><strong>{{ number_format($scoresShared) }}</strong></div>
+                <div class="stat"><div class="stat-label">Speedy Runs</div><strong>{{ number_format($dailyDurations['speedy']) }}</strong></div>
+                <div class="stat"><div class="stat-label">Fastest Run</div><strong class="duration-value">{{ $dailyDurations['fastest'] === null ? '—' : number_format($dailyDurations['fastest'] / 1000, 3).' s' }}</strong></div>
+            </div>
+            <div class="daily-legend">
                 <div><span class="legend"><span class="regular"></span> Regular</span></div>
                 <div><span class="legend"><span class="hard"></span> Hard</span></div>
-                <div style="margin-left: auto; text-align: right;">
-                    <div>Daily games @if ($date !== $gameDate)
-on {{ $date }}
-                    @else
-today
-                    @endif
-: <strong>{{ number_format($results->count()) }}</strong></div>
-                    <div>Practice games @if ($date !== $gameDate)
-on {{ $date }}
-                    @else
-today
-                    @endif
-: <strong>{{ number_format($practiceToday) }}</strong></div>
-                    <div>First 10 copied {{ $date === $gameDate ? 'today' : 'on '.$date }}: <strong>{{ $firstTenCopied ? '✓' : '—' }}</strong></div>
-                    <div>Scores Shared: <strong>{{ number_format($scoresShared) }}</strong></div>
-                </div>
             </div>
             @php
                 $maxCount = max(1, max($counts[0]), max($counts[1]));

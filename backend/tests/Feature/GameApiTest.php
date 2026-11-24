@@ -153,6 +153,30 @@ class GameApiTest extends TestCase
         $this->assertSame(1, DB::table('practice_plays')->count());
     }
 
+    public function test_result_durations_are_validated_and_saved_for_both_modes(): void
+    {
+        $this->postJson('/api/games', ['mode' => 'daily'])->assertOk();
+        $data = [
+            'mode' => 'daily', 'date' => '2026-03-15', 'hardMode' => false,
+            'answers' => array_fill(0, 10, true), 'submissionId' => (string) Str::uuid(),
+            'durationMs' => 59999,
+        ];
+        $this->postJson('/api/results', $data)->assertOk();
+        $data['durationMs'] = 60000;
+        $this->postJson('/api/results', $data)->assertOk();
+        $this->assertEquals(59999, DB::table('game_results')->value('duration_ms'));
+        $data['mode'] = 'practice';
+        $this->postJson('/api/results', $data)->assertOk();
+        $this->assertEquals(60000, DB::table('practice_plays')->value('duration_ms'));
+        $data['durationMs'] = -1;
+        $this->postJson('/api/results', $data)->assertUnprocessable();
+        $data['durationMs'] = 2147483648;
+        $this->postJson('/api/results', $data)->assertUnprocessable();
+        unset($data['durationMs']);
+        $this->postJson('/api/results', $data)->assertOk();
+        $this->assertSame(1, DB::table('practice_plays')->whereNull('duration_ms')->count());
+    }
+
     public function test_fast_mode_is_unavailable_outside_local_environment(): void
     {
         $this->getJson('/api/config')->assertOk()->assertJsonPath('fastModeAvailable', false);

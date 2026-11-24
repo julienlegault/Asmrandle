@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\GameService;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -79,14 +80,16 @@ class AdminController extends Controller
         $end = $start->copy()->addDay();
         $results = DB::table('game_results')->where('date', $date)->get();
         
-        // Only count practice games for the current day
-        $practiceToday = $date === $gameDate 
-            ? DB::table('practice_plays')->where('created_at', '>=', $start)
-                ->where('created_at', '<', $end)->count()
-            : 0;
+        $practiceToday = DB::table('practice_plays')->where('created_at', '>=', $start)
+            ->where('created_at', '<', $end)->count();
         
         $totalGames = DB::table('game_results')->count() + DB::table('practice_plays')->count() + self::COMPLETED_GAMES_OFFSET;
         $totalScoresShared = DB::table('game_results')->where('score_copied', true)->count();
+        $allTimeDurations = $this->getDurationStats(DB::table('game_results'), DB::table('practice_plays'));
+        $dailyDurations = $this->getDurationStats(
+            DB::table('game_results')->where('date', $date),
+            DB::table('practice_plays')->where('created_at', '>=', $start)->where('created_at', '<', $end),
+        );
         $challenge = DB::table('daily_challenges')->where('date', $date)->first();
         $cards = $challenge ? json_decode($challenge->cards, true, flags: JSON_THROW_ON_ERROR) : [];
         $counts = [array_fill(0, 11, 0), array_fill(0, 11, 0)];
@@ -137,7 +140,8 @@ class AdminController extends Controller
         return response()->view('admin.dashboard', compact(
             'date', 'gameDate', 'totalGames', 'practiceToday', 'results', 'cards', 'counts', 'correct', 'modeTotals',
             'seededRuns', 'runsOrder', 'source', 'sourceCards', 'sourceEmojis', 'editing', 'eligibleCards', 'logos',
-            'firstTenCopied', 'scoresShared', 'totalScoresShared', 'perfectScoreStats', 'dailyPlaysPerDay', 'allTimeAverageScore', 'allCardsMap',
+            'firstTenCopied', 'scoresShared', 'totalScoresShared', 'allTimeDurations', 'dailyDurations',
+            'perfectScoreStats', 'dailyPlaysPerDay', 'allTimeAverageScore', 'allCardsMap',
         ));
     }
 
@@ -214,6 +218,34 @@ class AdminController extends Controller
         }, attempts: 3);
 
         return redirect()->away(route('admin.dashboard', absolute: false))->with('status', 'Seeded run deleted.');
+    }
+
+    private function getDurationStats(Builder ...$queries): array
+    {
+        $count = 0;
+        $total = 0;
+        $fastest = null;
+        $speedy = 0;
+
+        foreach ($queries as $query) {
+            $stats = $query->whereNotNull('duration_ms')
+                ->selectRaw('COUNT(*) as run_count, SUM(duration_ms) as total_duration, MIN(duration_ms) as fastest_duration')
+                ->selectRaw('SUM(CASE WHEN duration_ms < 60000 THEN 1 ELSE 0 END) as speedy_count')
+                ->first();
+            $count += (int) $stats->run_count;
+            $total += (int) $stats->total_duration;
+            $speedy += (int) $stats->speedy_count;
+            if ($stats->fastest_duration !== null) {
+                $duration = (int) $stats->fastest_duration;
+                $fastest = $fastest === null ? $duration : min($fastest, $duration);
+            }
+        }
+
+        return [
+            'speedy' => $speedy,
+            'fastest' => $fastest,
+            'average' => $count ? $total / $count : null,
+        ];
     }
 
     private function getPerfectScoreStats(string $date): array

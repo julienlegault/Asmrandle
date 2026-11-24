@@ -69,9 +69,13 @@ Route::middleware('throttle:120,1')->group(function () {
             'answers' => 'required|array|size:10',
             'answers.*' => 'required|boolean',
             'submissionId' => 'required|uuid',
+            'durationMs' => 'nullable|integer|min:0|max:2147483647',
         ]);
         if ($data['mode'] === 'practice') {
-            DB::table('practice_plays')->insert(['created_at' => now()]);
+            DB::table('practice_plays')->insert([
+                'created_at' => now(),
+                'duration_ms' => $data['durationMs'] ?? null,
+            ]);
 
             return ['firstTen' => false];
         }
@@ -119,6 +123,7 @@ Route::middleware('throttle:120,1')->group(function () {
                 'score' => $score,
                 'first_ten' => $firstTen,
                 'answers' => json_encode($data['answers'], JSON_THROW_ON_ERROR),
+                'duration_ms' => $data['durationMs'] ?? null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

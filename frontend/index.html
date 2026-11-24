@@ -755,6 +755,8 @@
     let gameId = null;
     let fastModeAvailable = false;
     let submissionId = null;
+    let gameStartedAt = null;
+    let gameDurationMs = null;
     let perfectScoreEmojis = null;
     let copyToastTimeout = null;
     let logoVariant = 'standard';
@@ -1227,6 +1229,8 @@
       cardData = [];
       resultArray = [];
       submissionId = null;
+      gameStartedAt = null;
+      gameDurationMs = null;
       currentPair = 0;
       correctCount = 0;
       gameType = 0;
@@ -1303,6 +1307,7 @@
           dot.className = "dot";
           scoreboard.appendChild(dot);
         }
+        gameStartedAt = performance.now();
         showNextPair();
       } catch (error) {
         console.error(error);
@@ -1325,7 +1330,8 @@
             date: dateStr,
             hardMode,
             answers: resultArray,
-            submissionId
+            submissionId,
+            durationMs: gameDurationMs
           })
         });
         if (gameType === 1) {
@@ -1457,6 +1463,9 @@
       };
 
       currentPair++;
+      if (currentPair === 10) {
+        gameDurationMs = Math.min(Math.floor(performance.now() - gameStartedAt), 2147483647);
+      }
       const startWait = Date.now();
       const next = async () => {
         try {

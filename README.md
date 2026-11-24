@@ -66,6 +66,12 @@ completed results in each mode.
 Scores Shared counts daily runs whose scores were successfully copied and
 recorded; practice scores cannot be shared. Older results only record copies
 of the first perfect score, so historical sharing totals are incomplete.
+Speedy Runs counts daily and practice games completed in under 60 seconds,
+measured from the first matchup appearing to the final choice. Durations are
+reported by the browser; older games without recorded durations are excluded
+from the fastest and average duration statistics as well. Daily duration
+statistics use the selected game day, including practice games completed
+between 06:00 UTC and the following 06:00 UTC.
 
 Admins can schedule a seeded daily run by selecting a game date, 20 distinct
 playable cards in round order, a site logo (standard or pride), and optionally
