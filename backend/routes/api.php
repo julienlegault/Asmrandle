@@ -17,7 +17,7 @@ Route::middleware('throttle:120,1')->group(function () {
     Route::post('/games', function (Request $request, GameService $games) {
         $data = $request->validate(['mode' => 'required|in:daily,practice']);
         $date = $games->gameDate();
-        $startedAt = now();
+        $startedAt = now()->format('Y-m-d\TH:i:s.v\Z');
         if ($data['mode'] === 'daily') {
             $games->daily($date);
 
@@ -70,7 +70,7 @@ Route::middleware('throttle:120,1')->group(function () {
             'answers' => 'required|array|size:10',
             'answers.*' => 'required|boolean',
             'submissionId' => 'required|uuid',
-            'startedAt' => 'required|date',
+            'startedAt' => 'required|date_format:Y-m-d\TH:i:s.v\Z',
         ]);
         if ($data['mode'] === 'practice') {
             DB::table('practice_plays')->insert(['created_at' => now()]);
@@ -121,7 +121,7 @@ Route::middleware('throttle:120,1')->group(function () {
                 'score' => $score,
                 'first_ten' => $firstTen,
                 'answers' => json_encode($data['answers'], JSON_THROW_ON_ERROR),
-                'started_at' => $data['startedAt'],
+                'started_at' => \Illuminate\Support\Carbon::parse($data['startedAt']),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
