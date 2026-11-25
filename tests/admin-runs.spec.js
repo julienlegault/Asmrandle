@@ -80,9 +80,9 @@ test('changing dates updates daily results without losing editor state and suppo
     const daily = page.locator('.daily-stats');
     const editor = page.locator('#seeded-editor');
     const cards = daily.locator('.daily-summary .stat');
-    const labels = ['Daily games', 'Practice games', 'First 10 copied', 'Scores Shared', 'Speedy Runs', 'Fastest Run'];
+    const labels = ['Daily games', 'Practice games', 'First 10 copied', 'Scores Shared', 'Speedy Runs', 'Fastest Run', 'Average Run Duration'];
     await expect(cards.locator('.stat-label')).toHaveText(labels);
-    await expect(cards.locator('strong')).toHaveText(['0', '0', '—', '0', '0', '—']);
+    await expect(cards.locator('strong')).toHaveText(['0', '0', '—', '0', '0', '—', '—']);
     expect((await daily.locator('.daily-summary').boundingBox()).y).toBeLessThan((await daily.locator('.chart').boundingBox()).y);
     await expect(page.locator('.all-time-stats .stat-label')).toHaveText([
         'Completed games, all time', 'Scores Shared', 'Speedy Runs', 'Fastest Run', 'Average Run Duration', 'Days with no perfect 10s',
@@ -103,7 +103,7 @@ test('changing dates updates daily results without losing editor state and suppo
     await page.evaluate(() => { window.dashboardMarker = true; });
     await page.locator('#date-selector').fill(yesterday);
     await expect(cards.locator('.stat-label')).toHaveText(labels);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.000 s']);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.000 s', '42.000 s']);
     await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Average Run Duration' }).locator('strong')).toHaveText('53.500 s');
     await expect(page.locator('#current-date')).toHaveText(yesterday);
     await expect(page.locator('#seeded-card-input')).toHaveValue('unfinished selection');
@@ -114,13 +114,13 @@ test('changing dates updates daily results without losing editor state and suppo
 
     await page.locator('#date-selector').fill(older);
     await expect(cards.locator('.stat-label')).toHaveText(labels);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.000 s']);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.000 s', '65.000 s']);
     await page.goBack();
     await expect(page.locator('#date-selector')).toHaveValue(yesterday);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.000 s']);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.000 s', '42.000 s']);
     await page.goForward();
     await expect(page.locator('#date-selector')).toHaveValue(older);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.000 s']);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.000 s', '65.000 s']);
 
     fail = true;
     await page.locator('#date-selector').fill(today);
@@ -137,7 +137,7 @@ test('changing dates updates daily results without losing editor state and suppo
     try {
         await page.goBack();
         await expect(page.locator('#date-selector')).toHaveValue(today);
-        await expect(cards.locator('strong')).toHaveText(['0', '0', '—', '0', '0', '—']);
+        await expect(cards.locator('strong')).toHaveText(['0', '0', '—', '0', '0', '—', '—']);
     } finally {
         release();
     }

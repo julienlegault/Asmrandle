@@ -29,6 +29,19 @@ Route::middleware('throttle:120,1')->group(function () {
         return ['id' => $games->practice(), 'date' => $date, 'logo' => $games->logoForDate($date), 'startedAt' => $startedAt];
     });
 
+    Route::post('/games/preview', function (Request $request, GameService $games) {
+        abort_unless(app()->environment('local'), 404);
+        $data = $request->validate(['date' => 'required|date_format:Y-m-d']);
+        $challenge = DB::table('daily_challenges')->where('date', $data['date'])->first();
+        abort_unless($challenge, 404, 'No daily run exists for this date.');
+
+        return [
+            'id' => $games->storePracticeSnapshot(json_decode($challenge->cards, true, flags: JSON_THROW_ON_ERROR)),
+            'date' => $data['date'],
+            'logo' => $challenge->logo ?? 'standard',
+        ];
+    });
+
     Route::get('/games/{id}/rounds/{round}', function (string $id, int $round, GameService $games) {
         abort_unless($round >= 0 && $round < 10, 404);
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $id)) {

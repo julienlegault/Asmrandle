@@ -112,7 +112,16 @@
     #fast-mode-setting:not([hidden]) {
       display: flex;
       justify-content: flex-start;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
       margin: 12px 12px 0;
+    }
+    .preview-date-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9em;
     }
     .fast-mode-label {
       display: inline-flex;
@@ -694,6 +703,10 @@
         <span class="fast-mode-track" aria-hidden="true"></span>
       </span>
     </label>
+    <label class="preview-date-label">
+      Preview daily run
+      <input type="date" id="preview-date" />
+    </label>
   </div>
   <img src="images/Logo-Splash.png" alt="Asmrandle" class="main-logo logo-full" id="main-logo">
   <div class="main-menu" id="main-menu">
@@ -754,6 +767,7 @@
     let firstTen = false;
     let gameId = null;
     let fastModeAvailable = false;
+    let previewDate = null;
     let submissionId = null;
     let gameStartedAt = null;
     let gameStartTime = null;
@@ -1190,7 +1204,7 @@
         const card1Container = document.createElement("div");
         card1Container.className = "result-card";
         const img1 = document.createElement("img");
-        img1.src = card.img;
+        img1.src = cardImageUrl(card, false);
         const winner = card.popularity >= card2.popularity;
         if (winner) {
           card1Container.classList.add("result-winner");
@@ -1207,7 +1221,7 @@
         const card2Container = document.createElement("div");
         card2Container.className = "result-card";
         const img2 = document.createElement("img");
-        img2.src = card2.img;
+        img2.src = cardImageUrl(card2, false);
         if (!winner) {
           card2Container.classList.add("result-winner");
         } else {
@@ -1237,26 +1251,32 @@
       correctCount = 0;
       gameType = 0;
       perfectScoreEmojis = null;
+      previewDate = null;
       scoreboard.innerHTML = "";
       gameError.textContent = "";
       mainMenu.style.display = "none";
       switchToPlayLogo();
+      let selectedDate = '';
       try {
         await configPromise;
-        const game = await api('/games', {
+        selectedDate = type === 'daily' && fastModeAvailable
+          ? document.getElementById("preview-date").value : '';
+        const game = await api(selectedDate ? '/games/preview' : '/games', {
           method: 'POST',
-          body: JSON.stringify({ mode: type === 'daily' ? 'daily' : 'practice' })
+          body: JSON.stringify(selectedDate ? { date: selectedDate } : { mode: type === 'daily' ? 'daily' : 'practice' })
         });
-        if (game.date !== dateStr) throw new Error("The daily challenge changed. Reload the page.");
+        if (game.date !== (selectedDate || dateStr)) throw new Error("The daily challenge changed. Reload the page.");
         setLogo(game.logo);
         gameId = game.id;
         gameStartedAt = game.startedAt;
+        previewDate = selectedDate || null;
+        document.getElementById("preview-date").disabled = true;
         if (type === 'daily') {
           gameType = 1;
           perfectScoreEmojis = game.perfectScoreEmojis;
           
           // Try to retrieve today's result with device-based lookup first
-          let todayResult = await getTodayResult();
+          let todayResult = previewDate ? null : await getTodayResult();
           
           if (todayResult) {
             // Successfully retrieved from server
@@ -1289,7 +1309,7 @@
           }
           
           // Fall back to cookie-based lookup
-          const todayCookie = getCookie(`${dateStrSanatized}`);
+          const todayCookie = previewDate ? null : getCookie(`${dateStrSanatized}`);
           if (todayCookie !== null) {
             const cookieParts = todayCookie.split("|");
             hardMode = cookieParts.includes("HM");
@@ -1324,11 +1344,19 @@
       } catch (error) {
         console.error(error);
         mainMenu.style.display = "";
-        gameError.textContent = "Could not start the game. Please try again or reload the page.";
+        document.getElementById("preview-date").disabled = false;
+        gameError.textContent = selectedDate && error.status === 404
+          ? "No daily run exists for that date."
+          : "Could not start the game. Please try again or reload the page.";
       }
     }
 
     async function saveResults() {
+      if (previewDate) {
+        copyResultsBtn.style.display = "none";
+        showResults();
+        return;
+      }
       try {
         const submissionKey = `submission-${dateStrSanatized}-${hardMode ? 1 : 0}-${resultArray.map(Number).join("")}`;
         if (!submissionId) {
@@ -1382,7 +1410,9 @@
     function showResults() {
       gameArea.style.display = "none";
       result.style.display = "block";
-      if (gameType === 1) {
+      if (previewDate) {
+        resultText.textContent = `${previewDate} preview | ${correctCount}/10 correct`;
+      } else if (gameType === 1) {
         // Calculate elapsed time
         let elapsedSeconds = null;
         if (gameStartedAt) {
@@ -1428,6 +1458,12 @@
       showResultBreakdown();
     }
 
+    // Runs may assign a specific printing to a card; fall back to the default printing otherwise.
+    function cardImageUrl(card, useArt) {
+      const printing = card.printing ?? {};
+      return useArt ? (printing.artImg ?? card.artImg) : (printing.img ?? card.img);
+    }
+
     function showNextPair() {
       if (currentPair >= 10) {
         saveResults();
@@ -1442,7 +1478,7 @@
         const div = document.createElement("div");
         div.className = "card";
         const img = document.createElement("img");
-        img.src = hardMode ? card.artImg : card.img;
+        img.src = cardImageUrl(card, hardMode);
         div.appendChild(img);
         if (hardMode) {
           const overlay = document.createElement("div");
