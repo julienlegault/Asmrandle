@@ -103,11 +103,31 @@
     .edhrec-link:visited {
       color: #c8359b;
     }
+    .logo-container {
+      display: inline-block;
+      position: relative;
+    }
     .main-logo{
+      display: block;
       width: min(600px, 90vw);
       margin-top: 20px;
       margin-bottom: 15px;
     }
+    .welcome-text {
+      position: absolute;
+      right: 3%;
+      bottom: 24%;
+      width: 35%;
+      color: #e7891c;
+      font-size: clamp(10px, 2.5vw, 16px);
+      font-weight: bold;
+      line-height: 1.1;
+      overflow-wrap: anywhere;
+      -webkit-text-stroke: 2px black;
+      paint-order: stroke fill;
+      transform: rotate(-45deg);
+    }
+    .logo-container.is-playing .welcome-text { display: none; }
 
     #fast-mode-setting:not([hidden]) {
       display: flex;
@@ -695,7 +715,10 @@
       </span>
     </label>
   </div>
-  <img src="images/Logo-Splash.png" alt="Asmrandle" class="main-logo logo-full" id="main-logo">
+  <div class="logo-container" id="logo-container">
+    <img src="images/Logo-Splash.png" alt="Asmrandle" class="main-logo logo-full" id="main-logo">
+    <span class="welcome-text" id="welcome-text"></span>
+  </div>
   <div class="main-menu" id="main-menu">
     <div>
       <button id="start-daily" onClick="loadCards('daily')">Play Daily</button>
@@ -806,6 +829,7 @@
         fastModeAvailable = config.fastModeAvailable;
         document.getElementById("fast-mode-setting").hidden = !fastModeAvailable;
         setLogo(config.logo);
+        document.getElementById('welcome-text').textContent = config.welcomeText ?? '';
       }).catch(error => {
         console.error(error);
         gameError.textContent = "Could not load site settings.";
@@ -1240,6 +1264,7 @@
       scoreboard.innerHTML = "";
       gameError.textContent = "";
       mainMenu.style.display = "none";
+      document.getElementById('logo-container').classList.add('is-playing');
       switchToPlayLogo();
       try {
         await configPromise;
@@ -1324,6 +1349,7 @@
       } catch (error) {
         console.error(error);
         mainMenu.style.display = "";
+        document.getElementById('logo-container').classList.remove('is-playing');
         gameError.textContent = "Could not start the game. Please try again or reload the page.";
       }
     }

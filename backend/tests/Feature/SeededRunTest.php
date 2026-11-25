@@ -197,4 +197,29 @@ class SeededRunTest extends TestCase
         $this->getJson('/api/config')->assertJsonPath('logo', 'standard');
         $this->postJson('/api/games', ['mode' => 'daily'])->assertJsonPath('logo', 'standard');
     }
+
+    public function test_welcome_text_is_saved_copied_cleared_and_served_for_the_game_day(): void
+    {
+        $data = $this->runData();
+        $data['welcome_text'] = 'Welcome <friends>!';
+        $this->withSession($this->admin)->post('/admin/seeded-runs', $data)->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('daily_challenges', ['date' => $data['date'], 'welcome_text' => $data['welcome_text']]);
+        foreach (['edit', 'copy'] as $action) {
+            $this->withSession($this->admin)->get("/admin?$action=2026-03-16")
+                ->assertOk()->assertSee('value="Welcome &lt;friends&gt;!"', false);
+        }
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', null);
+        Carbon::setTestNow('2026-03-16 06:00:00 UTC');
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', 'Welcome <friends>!');
+        $data['welcome_text'] = '';
+        $this->withSession($this->admin)->put('/admin/seeded-runs/2026-03-16', $data)->assertSessionHasNoErrors();
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', null);
+        $data['welcome_text'] = str_repeat('a', 40);
+        $this->withSession($this->admin)->put('/admin/seeded-runs/2026-03-16', $data)->assertSessionHasNoErrors();
+        $data['welcome_text'] = str_repeat('a', 41);
+        $this->withSession($this->admin)->put('/admin/seeded-runs/2026-03-16', $data)->assertSessionHasErrors('welcome_text');
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', str_repeat('a', 40));
+        Carbon::setTestNow('2026-03-17 06:00:00 UTC');
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', null);
+    }
 }

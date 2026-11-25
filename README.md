@@ -75,7 +75,9 @@ between 06:00 UTC and the following 06:00 UTC.
 
 Admins can schedule a seeded daily run by selecting a game date, 20 distinct
 playable cards in round order, a site logo (standard or pride), and optionally
-a sequence of exactly 10 emojis for perfect-score shares. The selected logo
+a welcome message of up to 40 characters and a sequence of exactly 10 emojis
+for perfect-score shares. The welcome message appears over the landing-page
+logo for that game day. The selected logo
 applies to the entire site for that game day, including practice mode. The dashboard lists saved seeded runs and supports
 editing, deleting, and copying them to a new date. Card statistics are
 snapshotted when saved. Add cards through the picker or fill empty slots with
