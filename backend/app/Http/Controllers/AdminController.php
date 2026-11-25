@@ -4,12 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Services\GameService;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
@@ -145,14 +149,87 @@ class AdminController extends Controller
         ));
     }
 
+    public function cardPrintings(string $slug): JsonResponse
+    {
+        $card = DB::table('cards')->where('slug', $slug)->first(['scryfall_id']);
+        abort_unless($card, 404);
+
+        // Development and browser-test seeds use placeholder IDs that Scryfall cannot look up.
+        if (! Str::isUuid($card->scryfall_id)) {
+            return response()->json(['printings' => []]);
+        }
+
+        $printings = Cache::remember('scryfall-printings:'.$card->scryfall_id, now()->addDay(), fn () => $this->fetchPrintings($card->scryfall_id));
+
+        return response()->json(['printings' => $printings]);
+    }
+
+    private function fetchPrintings(string $oracleId): array
+    {
+        $headers = ['User-Agent' => 'Asmrandle/1.0 (https://asmrandle.com)', 'Accept' => 'application/json'];
+        $url = 'https://api.scryfall.com/cards/search';
+        $query = ['q' => "oracle_id:{$oracleId}", 'unique' => 'prints', 'order' => 'released'];
+        $printings = [];
+        for ($page = 0; $page < 10; $page++) {
+            $response = Http::withHeaders($headers)->timeout(30)->get($url, $query);
+            if ($response->status() === 404) {
+                break;
+            }
+            $response->throw();
+            foreach ($response->json('data') ?? [] as $print) {
+                $image = $print['image_uris']['normal'] ?? $print['card_faces'][0]['image_uris']['normal'] ?? null;
+                $art = $print['image_uris']['art_crop'] ?? $print['card_faces'][0]['image_uris']['art_crop'] ?? $image;
+                if (! $image) {
+                    continue;
+                }
+                $printings[] = [
+                    'scryfall_id' => $print['id'],
+                    'set_name' => $print['set_name'],
+                    'collector_number' => $print['collector_number'],
+                    'img' => $image,
+                    'artImg' => $art,
+                ];
+            }
+            if (! $response->json('has_more')) {
+                break;
+            }
+            $url = $response->json('next_page');
+            $query = [];
+        }
+
+        return $printings;
+    }
+
     public function saveSeededRun(Request $request, GameService $games, ?string $originalDate = null): RedirectResponse
     {
+        // The picker submits every slot, leaving blank IDs for default printings.
+        $rawPrintings = $request->input('printings');
+        if (is_array($rawPrintings)) {
+            $request->merge(['printings' => array_map(
+                fn ($printing) => is_array($printing) && ($printing['scryfall_id'] ?? '') !== '' ? $printing : null,
+                $rawPrintings
+            )]);
+        }
         $data = $request->validate([
             'date' => ['required', 'date_format:Y-m-d', 'after_or_equal:'.$games->gameDate()],
             'cards' => ['required', 'array', 'size:20'],
             'cards.*' => ['required', 'string', 'distinct', Rule::exists('cards', 'slug')->where(
                 fn ($query) => $query->where('legal', true)->whereNotNull('inclusion')->where('potential_decks', '>', 0)
             )],
+            'printings' => ['nullable', 'array', 'size:20'],
+            'printings.*' => ['nullable', function ($attribute, $value, $fail) {
+                if ($value === null) {
+                    return;
+                }
+                $printing = validator($value, [
+                    'scryfall_id' => ['required', 'uuid'],
+                    'img' => ['required', 'url:https', 'starts_with:https://cards.scryfall.io/'],
+                    'artImg' => ['required', 'url:https', 'starts_with:https://cards.scryfall.io/'],
+                ]);
+                if ($printing->fails()) {
+                    $fail('Each custom printing needs a Scryfall ID and image URLs from cards.scryfall.io.');
+                }
+            }],
             'logo' => ['nullable', Rule::in(array_keys(self::LOGOS))],
             'welcome_text' => ['nullable', 'string', 'max:40'],
             'perfect_score_emojis' => ['nullable', 'string', 'max:512', function ($attribute, $value, $fail) {
@@ -166,8 +243,14 @@ class AdminController extends Controller
         if (array_keys($data['cards']) !== range(0, 19)) {
             throw ValidationException::withMessages(['cards' => 'Select exactly 20 cards in order.']);
         }
+        // validated() can return keys out of order when a null entry precedes a custom one, so sort them first.
+        $printings = $data['printings'] ?? [];
+        ksort($printings);
+        if ($printings !== [] && array_keys($printings) !== range(0, 19)) {
+            throw ValidationException::withMessages(['printings' => 'Provide exactly 20 printings in card order.']);
+        }
 
-        DB::transaction(function () use ($data, $originalDate, $games) {
+        DB::transaction(function () use ($data, $originalDate, $games, $printings) {
             $original = null;
             if ($originalDate !== null) {
                 $original = DB::table('daily_challenges')->where('date', $originalDate)->lockForUpdate()->first();
@@ -182,7 +265,7 @@ class AdminController extends Controller
             if ($cardsBySlug->count() !== 20) {
                 throw ValidationException::withMessages(['cards' => 'One or more selected cards are no longer playable.']);
             }
-            $snapshot = $games->snapshot(collect($data['cards'])->map(fn ($slug) => $cardsBySlug[$slug]));
+            $snapshot = $games->snapshot(collect($data['cards'])->map(fn ($slug) => $cardsBySlug[$slug]), $printings);
             $values = [
                 'cards' => json_encode($snapshot, JSON_THROW_ON_ERROR),
                 'logo' => $data['logo'] ?? null,

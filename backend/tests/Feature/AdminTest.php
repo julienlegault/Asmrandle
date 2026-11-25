@@ -256,6 +256,7 @@ class AdminTest extends TestCase
         $this->withSession($session)->get('/admin')->assertOk()
             ->assertViewHas('dailyDurations', ['speedy' => 0, 'fastest' => null, 'average' => null])
             ->assertViewHas('allTimeDurations', ['speedy' => 0, 'fastest' => null, 'average' => null])
+            ->assertSee('<div class="stat-label">Average Run Duration</div><strong class="duration-value">—</strong>', false)
             ->assertSee('<div class="stat-label">Average Run Duration</div>
                 <strong class="duration-value">—</strong>', false);
 
@@ -279,10 +280,12 @@ class AdminTest extends TestCase
             ->assertViewHas('dailyDurations', ['speedy' => 2, 'fastest' => 45000, 'average' => 61249.75])
             ->assertViewHas('allTimeDurations', ['speedy' => 4, 'fastest' => 0, 'average' => 374999 / 7])
             ->assertSee('<div class="stat-label">Fastest Run</div><strong class="duration-value">45.000 s</strong>', false)
+            ->assertSee('<div class="stat-label">Average Run Duration</div><strong class="duration-value">61.250 s</strong>', false)
             ->assertSee('<strong class="duration-value">53.571 s</strong>', false);
         $this->withSession($session)->get('/admin?date=2026-03-18')->assertOk()
             ->assertViewHas('dailyDurations', ['speedy' => 1, 'fastest' => 0, 'average' => 60000])
-            ->assertSee('<div class="stat-label">Fastest Run</div><strong class="duration-value">0.000 s</strong>', false);
+            ->assertSee('<div class="stat-label">Fastest Run</div><strong class="duration-value">0.000 s</strong>', false)
+            ->assertSee('<div class="stat-label">Average Run Duration</div><strong class="duration-value">60.000 s</strong>', false);
         $this->withSession($session)->get('/admin')->assertOk()
             ->assertViewHas('dailyDurations', ['speedy' => 1, 'fastest' => 10000, 'average' => 10000]);
     }

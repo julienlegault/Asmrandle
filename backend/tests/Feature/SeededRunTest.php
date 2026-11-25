@@ -6,6 +6,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class SeededRunTest extends TestCase
@@ -221,5 +222,108 @@ class SeededRunTest extends TestCase
         $this->getJson('/api/config')->assertJsonPath('welcomeText', str_repeat('a', 40));
         Carbon::setTestNow('2026-03-17 06:00:00 UTC');
         $this->getJson('/api/config')->assertJsonPath('welcomeText', null);
+    }
+
+    public function test_custom_printings_are_saved_and_served_only_for_their_cards(): void
+    {
+        $printing = [
+            'scryfall_id' => '11111111-2222-4333-8444-555555555555',
+            'img' => 'https://cards.scryfall.io/normal/front/a.jpg',
+            'artImg' => 'https://cards.scryfall.io/art_crop/front/a.jpg',
+        ];
+        $data = $this->runData('2026-03-15');
+        $data['welcome_text'] = 'Welcome!';
+        $data['printings'] = array_fill(0, 20, null);
+        $data['printings'][3] = $printing;
+
+        $this->withSession($this->admin)->post('/admin/seeded-runs', $data)->assertSessionHasNoErrors();
+
+        $cards = json_decode(DB::table('daily_challenges')->where('date', '2026-03-15')->value('cards'), true);
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', 'Welcome!');
+        $this->assertSame($printing, $cards[3]['printing']);
+        $this->assertArrayNotHasKey('printing', $cards[0]);
+        $this->getJson('/api/games/2026-03-15/rounds/1')->assertOk()
+            ->assertJsonPath('cards.1.printing', $printing);
+        $this->getJson('/api/games/2026-03-15/rounds/0')->assertOk()
+            ->assertJsonMissingPath('cards.0.printing');
+    }
+
+    public function test_custom_printings_must_use_scryfall_images_and_valid_ids(): void
+    {
+        $base = $this->runData('2026-03-15');
+        $valid = [
+            'scryfall_id' => '11111111-2222-4333-8444-555555555555',
+            'img' => 'https://cards.scryfall.io/normal/front/a.jpg',
+            'artImg' => 'https://cards.scryfall.io/art_crop/front/a.jpg',
+        ];
+        $badPrintings = [
+            ['printings' => array_fill(0, 19, null)],
+            ['printings' => array_fill(0, 20, [...$valid, 'img' => 'https://evil.example/a.jpg'])],
+            ['printings' => array_fill(0, 20, [...$valid, 'artImg' => 'http://cards.scryfall.io/a.jpg'])],
+            ['printings' => array_fill(0, 20, [...$valid, 'scryfall_id' => 'not-a-uuid'])],
+        ];
+        foreach ($badPrintings as $override) {
+            $this->withSession($this->admin)->post('/admin/seeded-runs', [...$base, ...$override])
+                ->assertSessionHasErrors();
+        }
+        $this->assertDatabaseMissing('daily_challenges', ['date' => '2026-03-15']);
+    }
+
+    public function test_blank_picker_entries_save_as_default_printings(): void
+    {
+        $blank = ['scryfall_id' => '', 'img' => '', 'artImg' => ''];
+        $printing = [
+            'scryfall_id' => '11111111-2222-4333-8444-555555555555',
+            'img' => 'https://cards.scryfall.io/normal/front/a.jpg',
+            'artImg' => 'https://cards.scryfall.io/art_crop/front/a.jpg',
+        ];
+        $data = $this->runData('2026-03-15');
+        $data['printings'] = array_fill(0, 20, $blank);
+        $data['printings'][5] = $printing;
+
+        $this->withSession($this->admin)->post('/admin/seeded-runs', $data)->assertSessionHasNoErrors();
+
+        $cards = json_decode(DB::table('daily_challenges')->where('date', '2026-03-15')->value('cards'), true);
+        $this->assertSame($printing, $cards[5]['printing']);
+        $this->assertArrayNotHasKey('printing', $cards[4]);
+    }
+
+    public function test_card_printings_lists_every_scryfall_print_for_the_card(): void
+    {
+        $oracleId = '6a3c1b2e-4f5d-4e6a-9b7c-8d9e0f1a2b3c';
+        DB::table('cards')->where('slug', 'card-0')->update(['scryfall_id' => $oracleId]);
+
+        Http::fake(['api.scryfall.com/cards/search*' => Http::response([
+            'has_more' => false,
+            'data' => [
+                [
+                    'id' => 'print-a', 'set_name' => 'Alpha', 'collector_number' => '1',
+                    'image_uris' => ['normal' => 'https://cards.scryfall.io/normal/a.jpg', 'art_crop' => 'https://cards.scryfall.io/art_crop/a.jpg'],
+                ],
+                [
+                    'id' => 'print-b', 'set_name' => 'Beta', 'collector_number' => '22',
+                    'card_faces' => [['image_uris' => ['normal' => 'https://cards.scryfall.io/normal/b.jpg', 'art_crop' => 'https://cards.scryfall.io/art_crop/b.jpg']]],
+                ],
+            ],
+        ])]);
+
+        $this->withSession($this->admin)->getJson('/admin/cards/card-0/printings')->assertOk()
+            ->assertExactJson(['printings' => [
+                ['scryfall_id' => 'print-a', 'set_name' => 'Alpha', 'collector_number' => '1',
+                    'img' => 'https://cards.scryfall.io/normal/a.jpg', 'artImg' => 'https://cards.scryfall.io/art_crop/a.jpg'],
+                ['scryfall_id' => 'print-b', 'set_name' => 'Beta', 'collector_number' => '22',
+                    'img' => 'https://cards.scryfall.io/normal/b.jpg', 'artImg' => 'https://cards.scryfall.io/art_crop/b.jpg'],
+            ]]);
+        Http::assertSent(fn ($request) => str_contains(urldecode($request->url()), 'q=oracle_id:'.$oracleId));
+        $this->withSession($this->admin)->getJson('/admin/cards/missing-card/printings')->assertNotFound();
+    }
+
+    public function test_card_printings_skips_scryfall_for_placeholder_ids(): void
+    {
+        Http::fake();
+
+        $this->withSession($this->admin)->getJson('/admin/cards/card-0/printings')->assertOk()
+            ->assertExactJson(['printings' => []]);
+        Http::assertNothingSent();
     }
 }

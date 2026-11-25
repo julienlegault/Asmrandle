@@ -182,6 +182,56 @@ class GameApiTest extends TestCase
         $this->getJson('/api/config')->assertOk()->assertJsonPath('fastModeAvailable', false);
     }
 
+    public function test_daily_preview_is_local_only_and_does_not_start_the_scheduled_run(): void
+    {
+        $cards = app(\App\Services\GameService::class)->selectCards();
+        DB::table('daily_challenges')->insert([
+            'date' => '2026-03-20',
+            'cards' => json_encode($cards, JSON_THROW_ON_ERROR),
+            'seeded' => true,
+            'logo' => 'pride',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->postJson('/api/games/preview', ['date' => '2026-03-20'])->assertNotFound();
+        $this->app['env'] = 'local';
+        $this->getJson('/api/config')->assertJsonPath('fastModeAvailable', true);
+        $this->postJson('/api/games/preview', ['date' => 'invalid'])->assertUnprocessable();
+        $this->postJson('/api/games/preview', ['date' => '2026-03-21'])->assertNotFound();
+        $response = $this->postJson('/api/games/preview', ['date' => '2026-03-20'])
+            ->assertOk()->assertJsonPath('date', '2026-03-20')->assertJsonPath('logo', 'pride');
+        $id = $response->json('id');
+        $cards = json_decode(json_encode($cards, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+        $this->getJson("/api/games/{$id}/rounds/0")->assertOk()
+            ->assertJsonPath('cards', array_slice($cards, 0, 2));
+        $this->getJson("/api/games/{$id}/rounds/9")->assertOk()
+            ->assertJsonPath('cards', array_slice($cards, 18, 2));
+        $this->postJson('/api/games/preview', ['date' => '2026-03-20'])->assertOk();
+        $this->getJson('/api/games/2026-03-20/rounds/0')->assertNotFound();
+        $this->assertNull(DB::table('daily_challenges')->where('date', '2026-03-20')->value('started_at'));
+        $this->assertSame(1, DB::table('daily_challenges')->count());
+        $this->assertSame(0, DB::table('game_results')->count());
+        $this->assertSame(0, DB::table('practice_plays')->count());
+    }
+
+    public function test_preview_welcome_is_local_only_and_does_not_start_a_run(): void
+    {
+        DB::table('daily_challenges')->insert([
+            'date' => '2026-03-20', 'cards' => '[]', 'seeded' => true,
+            'welcome_text' => 'Future welcome', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->getJson('/api/preview/welcome?date=2026-03-20')->assertNotFound();
+        $this->app['env'] = 'local';
+        $this->getJson('/api/preview/welcome?date=invalid')->assertUnprocessable();
+        $this->getJson('/api/preview/welcome?date=2026-03-20')->assertOk()
+            ->assertJsonPath('welcomeText', 'Future welcome')->assertHeader('Cache-Control', 'no-store, private');
+        $this->getJson('/api/preview/welcome?date=2026-03-21')->assertOk()->assertJsonPath('welcomeText', null);
+        $this->assertNull(DB::table('daily_challenges')->where('date', '2026-03-20')->value('started_at'));
+        $this->assertSame(1, DB::table('daily_challenges')->count());
+        $this->assertSame(0, DB::table('practice_games')->count());
+    }
+
     public function test_edhrec_refresh_preserves_completed_work_when_a_request_fails(): void
     {
         DB::table('cards')->where('id', '>', 2)->update(['edhrec_checked_at' => now()]);
@@ -424,6 +474,82 @@ class GameApiTest extends TestCase
         } finally {
             $lock->release();
         }
+    }
+
+    public function test_development_id_resolution_preserves_card_data_and_is_repeatable(): void
+    {
+        DB::table('cards')->where('slug', 'card-0')->update(['scryfall_id' => 'dev-card-0']);
+        DB::table('cards')->where('slug', 'card-1')->update(['scryfall_id' => 'dev-card-1']);
+        $before = DB::table('cards')->where('slug', 'card-0')->first();
+        $oracleId = '4457ed35-7c10-48c8-9776-456485fdf070';
+        $cards = [
+            ['name' => 'Card 0 // Other', 'oracle_id' => '2b93787d-47ea-4b8b-912d-ffc5d5440171'],
+            ['name' => 'Card 0', 'oracle_id' => $oracleId],
+            ['name' => 'Card 2', 'oracle_id' => '6a3c1b2e-4f5d-4e6a-9b7c-8d9e0f1a2b3c'],
+        ];
+        for ($i = 0; $i < 18; $i++) {
+            $cards[] = ['name' => "Other $i"];
+        }
+        $this->fakeScryfallBulk($cards);
+
+        $this->app['env'] = 'local';
+        try {
+            $this->artisan('cards:import', ['--resolve-development-ids' => true])
+                ->expectsOutput('Resolved 1 development card IDs.')
+                ->expectsOutput('1 development card IDs could not be resolved.')
+                ->assertSuccessful();
+            $after = DB::table('cards')->where('slug', 'card-0')->first();
+            $this->assertSame($oracleId, $after->scryfall_id);
+            $this->assertSame($before->id, $after->id);
+            $this->assertSame($before->inclusion, $after->inclusion);
+            $this->assertSame($before->image_url, $after->image_url);
+            $this->assertSame('dev-card-1', DB::table('cards')->where('slug', 'card-1')->value('scryfall_id'));
+            $this->assertSame('id-2', DB::table('cards')->where('slug', 'card-2')->value('scryfall_id'));
+
+            $this->artisan('cards:import', ['--resolve-development-ids' => true])
+                ->expectsOutput('Resolved 0 development card IDs.')
+                ->assertSuccessful();
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+    }
+
+    public function test_development_id_resolution_rolls_back_incomplete_imports(): void
+    {
+        DB::table('cards')->where('slug', 'card-0')->update(['scryfall_id' => 'dev-card-0']);
+        $this->fakeScryfallBulk([['name' => 'Card 0', 'oracle_id' => '4457ed35-7c10-48c8-9776-456485fdf070']]);
+        $this->app['env'] = 'local';
+        try {
+            try {
+                $this->artisan('cards:import', ['--resolve-development-ids' => true])->run();
+                $this->fail('An incomplete import should fail.');
+            } catch (\RuntimeException $exception) {
+                $this->assertStringContainsString('incomplete', $exception->getMessage());
+            }
+            $this->assertSame('dev-card-0', DB::table('cards')->where('slug', 'card-0')->value('scryfall_id'));
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+    }
+
+    public function test_development_id_resolution_requires_local_environment(): void
+    {
+        Http::fake();
+        $this->artisan('cards:import', ['--resolve-development-ids' => true])->assertFailed();
+        Http::assertNothingSent();
+    }
+
+    private function fakeScryfallBulk(array $cards): void
+    {
+        $lines = implode("\n", array_map(fn ($card) => json_encode($card, JSON_THROW_ON_ERROR), $cards))."\n";
+        $gzip = gzencode($lines);
+        Http::fake(fn ($request) => str_contains($request->url(), '/bulk-data')
+            ? Http::response(['data' => [[
+                'type' => 'oracle_cards',
+                'jsonl_download_uri' => 'https://data.example.test/oracle.jsonl.gz',
+                'compressed_size' => strlen($gzip),
+            ]]])
+            : Http::response($gzip));
     }
 
     public function test_first_ten_can_be_marked_as_copied(): void
