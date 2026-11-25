@@ -107,10 +107,15 @@ class GameService
 
     public function practice(): string
     {
+        return $this->storePracticeSnapshot($this->selectCards());
+    }
+
+    public function storePracticeSnapshot(array $cards): string
+    {
         $id = (string) Str::uuid();
         DB::table('practice_games')->insert([
             'id' => $id,
-            'cards' => json_encode($this->selectCards(), JSON_THROW_ON_ERROR),
+            'cards' => json_encode($cards, JSON_THROW_ON_ERROR),
             'created_at' => now(),
             'updated_at' => now(),
         ]);

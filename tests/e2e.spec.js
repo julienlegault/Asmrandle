@@ -68,6 +68,65 @@ test.describe('Asmrandle E2E Tests', () => {
         await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false, logo: 'standard' } }));
         await page.goto(BASE_URL);
         await expect(page.locator('#fast-mode-setting')).toBeHidden();
+        await expect(page.getByLabel('Preview daily run')).toBeHidden();
+    });
+
+    test('Selected daily run can be previewed without recording a result', async ({ page }) => {
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: true, logo: 'standard' } }));
+        await page.route('**/api/games/preview', route => {
+            expect(route.request().postDataJSON()).toEqual({ date: '2099-12-30' });
+            return route.fulfill({ json: { id: 'preview-id', date: '2099-12-30', logo: 'pride' } });
+        });
+        await page.route('**/api/games/*/rounds/*', route => route.fulfill({ json: { cards: [
+            { name: 'first', popularity: 80, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+            { name: 'second', popularity: 20, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+        ] } }));
+        const unexpectedRequests = [];
+        await page.route('**/api/results**', route => {
+            unexpectedRequests.push(route.request().url());
+            return route.abort();
+        });
+        await page.goto(BASE_URL);
+        await page.getByLabel('Preview daily run').fill('2099-12-30');
+        await page.click('#start-daily');
+        await expect(page.locator('#main-logo')).toHaveAttribute('src', '/images/Logo-Play-Pride.png');
+        await expect(page.getByLabel('Preview daily run')).toBeDisabled();
+        for (let i = 0; i < 10; i++) {
+            await page.locator('.card').first().click();
+            await page.waitForSelector('.overlay', { state: 'hidden' });
+        }
+        await expect(page.locator('#result-text')).toHaveText('2099-12-30 preview | 10/10 correct');
+        await expect(page.locator('#copy-results')).toBeHidden();
+        expect(unexpectedRequests).toEqual([]);
+        expect(await page.evaluate(() => document.cookie)).not.toContain('20991230=');
+    });
+
+    test('Missing preview date reports an error and allows retry', async ({ page }) => {
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: true, logo: 'standard' } }));
+        await page.route('**/api/games/preview', route => route.fulfill({ status: 404 }));
+        await page.goto(BASE_URL);
+        await page.getByLabel('Preview daily run').fill('2099-12-30');
+        await page.click('#start-daily');
+        await expect(page.locator('#game-error')).toHaveText('No daily run exists for that date.');
+        await expect(page.getByLabel('Preview daily run')).toBeEnabled();
+        await expect(page.locator('#start-daily')).toBeVisible();
+    });
+
+    test('Practice ignores the selected preview date', async ({ page }) => {
+        const date = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: true, logo: 'standard' } }));
+        await page.route('**/api/games', route => {
+            expect(route.request().postDataJSON()).toEqual({ mode: 'practice' });
+            return route.fulfill({ json: { id: 'practice-id', date, logo: 'standard' } });
+        });
+        await page.route('**/api/games/*/rounds/*', route => route.fulfill({ json: { cards: [
+            { name: 'first', popularity: 80, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+            { name: 'second', popularity: 20, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+        ] } }));
+        await page.goto(BASE_URL);
+        await page.getByLabel('Preview daily run').fill('2099-12-30');
+        await page.click('#play-random');
+        await expect(page.locator('#game .card')).toHaveCount(2);
     });
 
     test.afterEach(async ({ page }, testInfo) => {

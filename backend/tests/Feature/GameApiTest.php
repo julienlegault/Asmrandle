@@ -182,6 +182,39 @@ class GameApiTest extends TestCase
         $this->getJson('/api/config')->assertOk()->assertJsonPath('fastModeAvailable', false);
     }
 
+    public function test_daily_preview_is_local_only_and_does_not_start_the_scheduled_run(): void
+    {
+        $cards = app(\App\Services\GameService::class)->selectCards();
+        DB::table('daily_challenges')->insert([
+            'date' => '2026-03-20',
+            'cards' => json_encode($cards, JSON_THROW_ON_ERROR),
+            'seeded' => true,
+            'logo' => 'pride',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->postJson('/api/games/preview', ['date' => '2026-03-20'])->assertNotFound();
+        $this->app['env'] = 'local';
+        $this->getJson('/api/config')->assertJsonPath('fastModeAvailable', true);
+        $this->postJson('/api/games/preview', ['date' => 'invalid'])->assertUnprocessable();
+        $this->postJson('/api/games/preview', ['date' => '2026-03-21'])->assertNotFound();
+        $response = $this->postJson('/api/games/preview', ['date' => '2026-03-20'])
+            ->assertOk()->assertJsonPath('date', '2026-03-20')->assertJsonPath('logo', 'pride');
+        $id = $response->json('id');
+        $cards = json_decode(json_encode($cards, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+        $this->getJson("/api/games/{$id}/rounds/0")->assertOk()
+            ->assertJsonPath('cards', array_slice($cards, 0, 2));
+        $this->getJson("/api/games/{$id}/rounds/9")->assertOk()
+            ->assertJsonPath('cards', array_slice($cards, 18, 2));
+        $this->postJson('/api/games/preview', ['date' => '2026-03-20'])->assertOk();
+        $this->getJson('/api/games/2026-03-20/rounds/0')->assertNotFound();
+        $this->assertNull(DB::table('daily_challenges')->where('date', '2026-03-20')->value('started_at'));
+        $this->assertSame(1, DB::table('daily_challenges')->count());
+        $this->assertSame(0, DB::table('game_results')->count());
+        $this->assertSame(0, DB::table('practice_plays')->count());
+    }
+
     public function test_edhrec_refresh_preserves_completed_work_when_a_request_fails(): void
     {
         DB::table('cards')->where('id', '>', 2)->update(['edhrec_checked_at' => now()]);

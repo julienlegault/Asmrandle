@@ -15,7 +15,11 @@ Scryfall in the browser. Existing data is not reseeded on restart. See
 
 Open the forwarded port to play. The **Fast Mode** switch in the top-left is available only
 when Laravel's `APP_ENV=local`; it changes the card reveal delay from 2800 ms
-to 200 ms. Production never exposes it.
+to 200 ms. The adjacent date picker previews an existing daily run when you
+press Play Daily; clear it to play today normally. Previews can be repeated,
+do not record scores or lock scheduled runs, and report an error if no run
+exists for the selected date. Practice ignores the picker. Production never
+exposes these development controls.
 
 ```sh
 npm test                              # Browser tests; see below
