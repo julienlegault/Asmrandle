@@ -210,6 +210,7 @@
                 <div class="stat"><div class="stat-label">Scores Shared</div><strong>{{ number_format($scoresShared) }}</strong></div>
                 <div class="stat"><div class="stat-label">Speedy Runs</div><strong>{{ number_format($dailyDurations['speedy']) }}</strong></div>
                 <div class="stat"><div class="stat-label">Fastest Run</div><strong class="duration-value">{{ $dailyDurations['fastest'] === null ? '—' : number_format($dailyDurations['fastest'] / 1000, 3).' s' }}</strong></div>
+                <div class="stat"><div class="stat-label">Average Run Duration</div><strong class="duration-value">{{ $dailyDurations['average'] === null ? '—' : number_format($dailyDurations['average'] / 1000, 3).' s' }}</strong></div>
             </div>
             <div class="daily-legend">
                 <div><span class="legend"><span class="regular"></span> Regular</span></div>
