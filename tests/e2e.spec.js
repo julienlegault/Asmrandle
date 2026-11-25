@@ -30,6 +30,7 @@ test.describe('Asmrandle E2E Tests', () => {
                 }),
             })
         );
+        await page.route('**/api/preview/welcome?*', route => route.fulfill({ json: { welcomeText: null } }));
 
     });
 
@@ -102,7 +103,8 @@ test.describe('Asmrandle E2E Tests', () => {
     });
 
     test('Missing preview date reports an error and allows retry', async ({ page }) => {
-        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: true, logo: 'standard' } }));
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: true, logo: 'standard', welcomeText: 'Welcome!' } }));
+        await page.route('**/api/preview/welcome?*', route => route.fulfill({ json: { welcomeText: 'Preview welcome' } }));
         await page.route('**/api/games/preview', route => route.fulfill({ status: 404 }));
         await page.goto(BASE_URL);
         await page.getByLabel('Preview daily run').fill('2099-12-30');
@@ -110,6 +112,66 @@ test.describe('Asmrandle E2E Tests', () => {
         await expect(page.locator('#game-error')).toHaveText('No daily run exists for that date.');
         await expect(page.getByLabel('Preview daily run')).toBeEnabled();
         await expect(page.locator('#start-daily')).toBeVisible();
+        await expect(page.locator('#welcome-text')).toBeVisible();
+        await expect(page.locator('#welcome-text')).toHaveText('Preview welcome');
+    });
+
+    test('Preview date updates welcome text and clearing it restores the current day', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-03-16T05:59:58Z') });
+        let currentText = 'Today';
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: true, logo: 'standard', welcomeText: currentText } }));
+        await page.route('**/api/preview/welcome?*', route => {
+            const date = new URL(route.request().url()).searchParams.get('date');
+            return route.fulfill({ json: { welcomeText: date === '2099-12-30' ? 'Future <welcome>' : null } });
+        });
+        await page.goto(BASE_URL);
+        const picker = page.getByLabel('Preview daily run');
+        const text = page.locator('#welcome-text');
+        await expect(text).toHaveText('Today');
+        await picker.fill('2099-12-30');
+        await expect(text).toHaveText('Future <welcome>');
+        await expect(text.locator('welcome')).toHaveCount(0);
+        currentText = 'Tomorrow';
+        await page.clock.fastForward(3000);
+        await expect(text).toHaveText('Future <welcome>');
+        await picker.fill('2099-12-31');
+        await expect(text).toBeEmpty();
+        await picker.fill('');
+        await expect(text).toHaveText('Tomorrow');
+    });
+
+    test('Preview welcome ignores stale responses and reports lookup errors', async ({ page }) => {
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: true, logo: 'standard', welcomeText: 'Today' } }));
+        let release;
+        const blocked = new Promise(resolve => { release = resolve; });
+        let requested;
+        const received = new Promise(resolve => { requested = resolve; });
+        await page.route('**/api/preview/welcome?*', async route => {
+            const date = new URL(route.request().url()).searchParams.get('date');
+            if (date === '2099-12-30') {
+                requested();
+                await blocked;
+                return route.fulfill({ json: { welcomeText: 'Old' } });
+            }
+            if (date === '2099-12-31') return route.fulfill({ json: { welcomeText: 'New' } });
+            return route.fulfill({ status: 500 });
+        });
+        await page.goto(BASE_URL);
+        const picker = page.getByLabel('Preview daily run');
+        const text = page.locator('#welcome-text');
+        await picker.fill('2099-12-30');
+        await received;
+        await picker.fill('2099-12-31');
+        await expect(text).toHaveText('New');
+        release();
+        await page.waitForResponse(response => response.url().includes('date=2099-12-30'));
+        await expect(text).toHaveText('New');
+        await picker.fill('2099-12-29');
+        await expect(page.locator('#preview-date-error')).toHaveText('Could not load the preview welcome text.');
+        await expect(text).toBeEmpty();
+        await picker.fill('');
+        await expect(text).toHaveText('Today');
+        await expect(page.locator('#preview-date-error')).toBeEmpty();
     });
 
     test('Practice ignores the selected preview date', async ({ page }) => {
@@ -171,6 +233,91 @@ test.describe('Asmrandle E2E Tests', () => {
         logo = 'standard';
         await page.clock.fastForward(3000);
         await expect(image).toHaveAttribute('src', '/images/Logo-Play.png');
+    });
+
+    test('Welcome text appears on the landing logo, updates at rollover and hides during play', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-03-16T05:59:58Z') });
+        let welcomeText = 'Welcome <friends>!';
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false, logo: 'standard', welcomeText } }));
+        await page.route('**/api/games', route => route.fulfill({ status: 500 }));
+        await page.goto(BASE_URL);
+        const text = page.locator('#welcome-text');
+        await expect(text).toHaveText(welcomeText);
+        await expect(text.locator('friends')).toHaveCount(0);
+        await expect(text).toHaveCSS('color', 'rgb(231, 137, 28)');
+        await expect(text).toHaveCSS('-webkit-text-stroke-width', '2px');
+        const angle = await text.evaluate(element => {
+            const matrix = new DOMMatrix(getComputedStyle(element).transform);
+            return Math.atan2(matrix.b, matrix.a) * 180 / Math.PI;
+        });
+        expect(angle).toBeCloseTo(-45, 1);
+        const logoBounds = await page.locator('#main-logo').boundingBox();
+        const textBounds = await text.boundingBox();
+        expect(textBounds.x + textBounds.width / 2).toBeGreaterThan(logoBounds.x + logoBounds.width / 2);
+        expect(textBounds.y + textBounds.height / 2).toBeGreaterThan(logoBounds.y + logoBounds.height / 2);
+        await page.click('#play-random');
+        await expect(page.locator('#game-error')).toContainText('Could not start');
+        await expect(text).toBeVisible();
+        welcomeText = null;
+        await page.clock.fastForward(3000);
+        await expect(text).toBeEmpty();
+    });
+
+    test('Welcome text is hidden after starting a game', async ({ page }) => {
+        const date = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false, logo: 'pride', welcomeText: 'Welcome!' } }));
+        await page.route('**/api/games', route => route.fulfill({ json: { id: 'practice', date, logo: 'pride' } }));
+        await page.route('**/api/games/*/rounds/*', route => route.fulfill({ json: { cards: [
+            { name: 'first', popularity: 80, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+            { name: 'second', popularity: 20, img: '/images/Logo-Play.png', artImg: '', flavorText: '' },
+        ] } }));
+        await page.goto(BASE_URL);
+        await expect(page.locator('#welcome-text')).toHaveText('Welcome!');
+        await page.click('#play-random');
+        await expect(page.locator('#game')).toBeVisible();
+        await expect(page.locator('#welcome-text')).toBeHidden();
+    });
+
+    test('Welcome text breathes and glows together unless reduced motion is requested', async ({ page }) => {
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false, logo: 'standard', welcomeText: 'Welcome!' } }));
+        await page.goto(BASE_URL);
+        const text = page.locator('#welcome-text');
+        await expect(text).toHaveText('Welcome!');
+        const frames = await text.evaluate(element => {
+            const animation = element.getAnimations()[0];
+            animation.pause();
+            return [0, 750, 1500, 2250].map(time => {
+                animation.currentTime = time;
+                const style = getComputedStyle(element);
+                const matrix = new DOMMatrix(style.transform);
+                const blur = Number(style.textShadow.match(/ ([\d.]+)px$/)[1]);
+                return { scale: Math.hypot(matrix.a, matrix.b), blur, shadow: style.textShadow };
+            });
+        });
+        expect(frames[1].scale).toBeGreaterThan(frames[0].scale);
+        expect(frames[2].scale).toBeGreaterThan(frames[1].scale);
+        expect(frames[3].scale).toBeLessThan(frames[2].scale);
+        expect(frames[3].scale).toBeGreaterThan(frames[0].scale);
+        expect(frames[1].blur).toBeGreaterThan(frames[0].blur);
+        expect(frames[2].blur).toBeGreaterThan(frames[1].blur);
+        expect(frames[3].blur).toBeLessThan(frames[2].blur);
+        expect(frames[3].blur).toBeGreaterThan(frames[0].blur);
+        expect(frames[2].shadow).toContain('rgba(255, 230, 0, 0.9)');
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await expect(text).toHaveCSS('animation-name', 'none');
+        await expect(text).toHaveCSS('text-shadow', 'none');
+    });
+
+    test('Longest welcome text fits on a narrow landing page', async ({ page }) => {
+        await page.setViewportSize({ width: 320, height: 700 });
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false, logo: 'standard', welcomeText: 'W'.repeat(40) } }));
+        await page.goto(BASE_URL);
+        const text = page.locator('#welcome-text');
+        await expect(text).toHaveText('W'.repeat(40));
+        const bounds = await text.boundingBox();
+        expect(bounds.x).toBeGreaterThanOrEqual(0);
+        expect(bounds.y).toBeGreaterThanOrEqual(0);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
     });
 
     test('Daily game applies a logo scheduled after the page was opened', async ({ page }) => {

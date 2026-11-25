@@ -299,6 +299,9 @@
                             @endforeach
                         </select>
                     </label>
+                    <label>Welcome text
+                        <input type="text" name="welcome_text" maxlength="40" value="{{ old('welcome_text', $source->welcome_text ?? '') }}" placeholder="Optional, up to 40 characters">
+                    </label>
                 </div>
                 <div class="seeded-picker">
                     <label>Add a card

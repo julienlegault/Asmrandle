@@ -215,6 +215,23 @@ class GameApiTest extends TestCase
         $this->assertSame(0, DB::table('practice_plays')->count());
     }
 
+    public function test_preview_welcome_is_local_only_and_does_not_start_a_run(): void
+    {
+        DB::table('daily_challenges')->insert([
+            'date' => '2026-03-20', 'cards' => '[]', 'seeded' => true,
+            'welcome_text' => 'Future welcome', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->getJson('/api/preview/welcome?date=2026-03-20')->assertNotFound();
+        $this->app['env'] = 'local';
+        $this->getJson('/api/preview/welcome?date=invalid')->assertUnprocessable();
+        $this->getJson('/api/preview/welcome?date=2026-03-20')->assertOk()
+            ->assertJsonPath('welcomeText', 'Future welcome')->assertHeader('Cache-Control', 'no-store, private');
+        $this->getJson('/api/preview/welcome?date=2026-03-21')->assertOk()->assertJsonPath('welcomeText', null);
+        $this->assertNull(DB::table('daily_challenges')->where('date', '2026-03-20')->value('started_at'));
+        $this->assertSame(1, DB::table('daily_challenges')->count());
+        $this->assertSame(0, DB::table('practice_games')->count());
+    }
+
     public function test_edhrec_refresh_preserves_completed_work_when_a_request_fails(): void
     {
         DB::table('cards')->where('id', '>', 2)->update(['edhrec_checked_at' => now()]);

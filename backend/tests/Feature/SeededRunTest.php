@@ -199,6 +199,31 @@ class SeededRunTest extends TestCase
         $this->postJson('/api/games', ['mode' => 'daily'])->assertJsonPath('logo', 'standard');
     }
 
+    public function test_welcome_text_is_saved_copied_cleared_and_served_for_the_game_day(): void
+    {
+        $data = $this->runData();
+        $data['welcome_text'] = 'Welcome <friends>!';
+        $this->withSession($this->admin)->post('/admin/seeded-runs', $data)->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('daily_challenges', ['date' => $data['date'], 'welcome_text' => $data['welcome_text']]);
+        foreach (['edit', 'copy'] as $action) {
+            $this->withSession($this->admin)->get("/admin?$action=2026-03-16")
+                ->assertOk()->assertSee('value="Welcome &lt;friends&gt;!"', false);
+        }
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', null);
+        Carbon::setTestNow('2026-03-16 06:00:00 UTC');
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', 'Welcome <friends>!');
+        $data['welcome_text'] = '';
+        $this->withSession($this->admin)->put('/admin/seeded-runs/2026-03-16', $data)->assertSessionHasNoErrors();
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', null);
+        $data['welcome_text'] = str_repeat('a', 40);
+        $this->withSession($this->admin)->put('/admin/seeded-runs/2026-03-16', $data)->assertSessionHasNoErrors();
+        $data['welcome_text'] = str_repeat('a', 41);
+        $this->withSession($this->admin)->put('/admin/seeded-runs/2026-03-16', $data)->assertSessionHasErrors('welcome_text');
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', str_repeat('a', 40));
+        Carbon::setTestNow('2026-03-17 06:00:00 UTC');
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', null);
+    }
+
     public function test_custom_printings_are_saved_and_served_only_for_their_cards(): void
     {
         $printing = [
@@ -207,12 +232,14 @@ class SeededRunTest extends TestCase
             'artImg' => 'https://cards.scryfall.io/art_crop/front/a.jpg',
         ];
         $data = $this->runData('2026-03-15');
+        $data['welcome_text'] = 'Welcome!';
         $data['printings'] = array_fill(0, 20, null);
         $data['printings'][3] = $printing;
 
         $this->withSession($this->admin)->post('/admin/seeded-runs', $data)->assertSessionHasNoErrors();
 
         $cards = json_decode(DB::table('daily_challenges')->where('date', '2026-03-15')->value('cards'), true);
+        $this->getJson('/api/config')->assertJsonPath('welcomeText', 'Welcome!');
         $this->assertSame($printing, $cards[3]['printing']);
         $this->assertArrayNotHasKey('printing', $cards[0]);
         $this->getJson('/api/games/2026-03-15/rounds/1')->assertOk()

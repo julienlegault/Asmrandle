@@ -15,8 +15,9 @@ Scryfall in the browser. Existing data is not reseeded on restart. See
 
 Open the forwarded port to play. The **Fast Mode** switch in the top-left is available only
 when Laravel's `APP_ENV=local`; it changes the card reveal delay from 2800 ms
-to 200 ms. The adjacent date picker previews an existing daily run when you
-press Play Daily; clear it to play today normally. Previews can be repeated,
+to 200 ms. The adjacent date picker shows the selected run's welcome message
+and previews the run when you press Play Daily; clear it to return to today's
+message and play normally. Previews can be repeated,
 do not record scores or lock scheduled runs, and report an error if no run
 exists for the selected date. Practice ignores the picker. Production never
 exposes these development controls.
@@ -79,7 +80,9 @@ between 06:00 UTC and the following 06:00 UTC.
 
 Admins can schedule a seeded daily run by selecting a game date, 20 distinct
 playable cards in round order, a site logo (standard or pride), and optionally
-a sequence of exactly 10 emojis for perfect-score shares. The selected logo
+a welcome message of up to 40 characters and a sequence of exactly 10 emojis
+for perfect-score shares. The welcome message appears over the landing-page
+logo for that game day. The selected logo
 applies to the entire site for that game day, including practice mode. The dashboard lists saved seeded runs and supports
 editing, deleting, and copying them to a new date. Card statistics are
 snapshotted when saved. Add cards through the picker or fill empty slots with

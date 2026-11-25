@@ -231,6 +231,7 @@ class AdminController extends Controller
                 }
             }],
             'logo' => ['nullable', Rule::in(array_keys(self::LOGOS))],
+            'welcome_text' => ['nullable', 'string', 'max:40'],
             'perfect_score_emojis' => ['nullable', 'string', 'max:512', function ($attribute, $value, $fail) {
                 $base = '(?![\p{Regional_Indicator}\x{1F3FB}-\x{1F3FF}])[\p{Extended_Pictographic}\p{Emoji_Presentation}]\x{FE0F}?[\x{1F3FB}-\x{1F3FF}]?';
                 $emoji = '(?:\p{Regional_Indicator}{2}|[0-9#*]\x{FE0F}?\x{20E3}|'.$base.'(?:\x{200D}'.$base.')*(?:[\x{E0020}-\x{E007E}]+\x{E007F})?)';
@@ -268,6 +269,7 @@ class AdminController extends Controller
             $values = [
                 'cards' => json_encode($snapshot, JSON_THROW_ON_ERROR),
                 'logo' => $data['logo'] ?? null,
+                'welcome_text' => $data['welcome_text'] ?? null,
                 'perfect_score_emojis' => isset($data['perfect_score_emojis']) ? json_encode($data['perfect_score_emojis'], JSON_THROW_ON_ERROR) : null,
                 'updated_at' => now(),
             ];

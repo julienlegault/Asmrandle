@@ -103,10 +103,41 @@
     .edhrec-link:visited {
       color: #c8359b;
     }
+    .logo-container {
+      display: inline-block;
+      position: relative;
+    }
     .main-logo{
+      display: block;
       width: min(600px, 90vw);
       margin-top: 20px;
       margin-bottom: 15px;
+    }
+    .welcome-text {
+      position: absolute;
+      left: 77%;
+      bottom: 24%;
+      width: 35%;
+      color: #e7891c;
+      font-size: clamp(10px, 2.5vw, 16px);
+      font-weight: bold;
+      line-height: 1.1;
+      overflow-wrap: anywhere;
+      -webkit-text-stroke: 2px black;
+      paint-order: stroke fill;
+      transform: rotate(-45deg);
+      animation: welcome-breathe 3s ease-in-out infinite;
+    }
+    .logo-container.is-playing .welcome-text { display: none; }
+    @media (max-width: 360px) {
+      .welcome-text { left: 65%; }
+    }
+    @keyframes welcome-breathe {
+      0%, 100% { transform: rotate(-45deg) scale(0.96); text-shadow: 0 0 0 rgba(255, 230, 0, 0); }
+      50% { transform: rotate(-45deg) scale(1.08); text-shadow: 0 0 12px rgba(255, 230, 0, 0.9); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .welcome-text { animation: none; }
     }
 
     #fast-mode-setting:not([hidden]) {
@@ -707,8 +738,12 @@
       Preview daily run
       <input type="date" id="preview-date" />
     </label>
+    <span id="preview-date-error" role="alert"></span>
   </div>
-  <img src="images/Logo-Splash.png" alt="Asmrandle" class="main-logo logo-full" id="main-logo">
+  <div class="logo-container" id="logo-container">
+    <img src="images/Logo-Splash.png" alt="Asmrandle" class="main-logo logo-full" id="main-logo">
+    <span class="welcome-text" id="welcome-text"></span>
+  </div>
   <div class="main-menu" id="main-menu">
     <div>
       <button id="start-daily" onClick="loadCards('daily')">Play Daily</button>
@@ -768,6 +803,8 @@
     let gameId = null;
     let fastModeAvailable = false;
     let previewDate = null;
+    let currentWelcomeText = '';
+    let welcomeRequest = 0;
     let submissionId = null;
     let gameStartedAt = null;
     let gameStartTime = null;
@@ -815,11 +852,36 @@
       logo.src = logos[variant][logo.classList.contains('logo-play') ? 'play' : 'splash'];
     }
 
+    async function updatePreviewWelcome() {
+      const date = document.getElementById('preview-date').value;
+      const request = ++welcomeRequest;
+      const text = document.getElementById('welcome-text');
+      const errorMessage = document.getElementById('preview-date-error');
+      errorMessage.textContent = '';
+      text.textContent = date ? '' : currentWelcomeText;
+      if (!date) return;
+      try {
+        const config = await api(`/preview/welcome?date=${encodeURIComponent(date)}`, { cache: 'no-store' });
+        if (request === welcomeRequest) text.textContent = config.welcomeText ?? '';
+      } catch (error) {
+        if (request === welcomeRequest) {
+          console.error(error);
+          errorMessage.textContent = 'Could not load the preview welcome text.';
+        }
+      }
+    }
+
+    document.getElementById('preview-date').addEventListener('change', updatePreviewWelcome);
+
     function refreshConfig() {
       return api('/config', { cache: 'no-store' }).then(config => {
         fastModeAvailable = config.fastModeAvailable;
         document.getElementById("fast-mode-setting").hidden = !fastModeAvailable;
         setLogo(config.logo);
+        currentWelcomeText = config.welcomeText ?? '';
+        if (!document.getElementById('preview-date').value) {
+          document.getElementById('welcome-text').textContent = currentWelcomeText;
+        }
       }).catch(error => {
         console.error(error);
         gameError.textContent = "Could not load site settings.";
@@ -1255,6 +1317,7 @@
       scoreboard.innerHTML = "";
       gameError.textContent = "";
       mainMenu.style.display = "none";
+      document.getElementById('logo-container').classList.add('is-playing');
       switchToPlayLogo();
       let selectedDate = '';
       try {
@@ -1344,6 +1407,7 @@
       } catch (error) {
         console.error(error);
         mainMenu.style.display = "";
+        document.getElementById('logo-container').classList.remove('is-playing');
         document.getElementById("preview-date").disabled = false;
         gameError.textContent = selectedDate && error.status === 404
           ? "No daily run exists for that date."
@@ -1569,7 +1633,6 @@
   </script>
 </body>
 </html>
-
 
 
 

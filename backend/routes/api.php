@@ -8,9 +8,21 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('throttle:120,1')->group(function () {
     Route::get('/config', function (GameService $games) {
+        $date = $games->gameDate();
         return response()->json([
             'fastModeAvailable' => app()->environment('local'),
-            'logo' => $games->logoForDate($games->gameDate()),
+            'logo' => $games->logoForDate($date),
+            'welcomeText' => DB::table('daily_challenges')->where('date', $date)->where('seeded', true)->value('welcome_text'),
+        ])->header('Cache-Control', 'no-store');
+    });
+
+    Route::get('/preview/welcome', function (Request $request) {
+        abort_unless(app()->environment('local'), 404);
+        $data = $request->validate(['date' => 'required|date_format:Y-m-d']);
+
+        return response()->json([
+            'welcomeText' => DB::table('daily_challenges')->where('date', $data['date'])
+                ->where('seeded', true)->value('welcome_text'),
         ])->header('Cache-Control', 'no-store');
     });
 
