@@ -58,15 +58,29 @@ class GameService
         return $this->snapshot($cards);
     }
 
-    public function snapshot(Collection $cards): array
+    /**
+     * @param  array<int, array{scryfall_id: string, img: string, artImg: string}|null>  $printings  Keyed by card position.
+     */
+    public function snapshot(Collection $cards, array $printings = []): array
     {
-        return $cards->map(fn ($card) => [
-            'name' => $card->slug,
-            'popularity' => $card->inclusion / $card->potential_decks * 100,
-            'img' => $card->image_url,
-            'artImg' => $card->art_url,
-            'flavorText' => $card->flavor_text ?: 'No flavor text available',
-        ])->all();
+        return $cards->values()->map(function ($card, $index) use ($printings) {
+            $snapshot = [
+                'name' => $card->slug,
+                'popularity' => $card->inclusion / $card->potential_decks * 100,
+                'img' => $card->image_url,
+                'artImg' => $card->art_url,
+                'flavorText' => $card->flavor_text ?: 'No flavor text available',
+            ];
+            if (! empty($printings[$index])) {
+                $snapshot['printing'] = [
+                    'scryfall_id' => $printings[$index]['scryfall_id'],
+                    'img' => $printings[$index]['img'],
+                    'artImg' => $printings[$index]['artImg'],
+                ];
+            }
+
+            return $snapshot;
+        })->all();
     }
 
     public function daily(string $date): array

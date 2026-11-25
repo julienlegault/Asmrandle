@@ -68,6 +68,11 @@
         .seeded-ghost { position: fixed; z-index: 20; pointer-events: none; opacity: .8; }
         .seeded-controls { display: flex; justify-content: center; gap: .2rem; margin-top: .3rem; }
         .seeded-controls button { padding: .2rem .35rem; font-size: .8rem; }
+        .printing-dialog { width: min(90vw, 60rem); max-height: 85vh; background: #232637; color: inherit; border: 1px solid #70758c; border-radius: .5rem; }
+        .printing-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: .5rem; margin-top: .5rem; }
+        .printing-option { display: flex; flex-direction: column; gap: .25rem; padding: .25rem; font-size: .8rem; }
+        .printing-option img { width: 100%; border-radius: .3rem; }
+        .printing-option[aria-pressed="true"] { outline: 3px solid #8bb9ff; }
         .actions { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
         a { color: #a9caff; }
         .errors { color: #ffb4a9; max-width: 1200px; margin: 1.5rem auto; }
@@ -312,7 +317,11 @@
                                 @foreach (range(0, 1) as $side)
                                     @php $index = $round * 2 + $side; @endphp
                                     <div class="seeded-slot" data-index="{{ $index }}">
+                                        @php $printing = $sourceCards[$index]['printing'] ?? []; @endphp
                                         <input type="hidden" name="cards[{{ $index }}]" value="{{ old('cards.'.$index, $sourceCards[$index]['name'] ?? '') }}">
+                                        <input type="hidden" name="printings[{{ $index }}][scryfall_id]" value="{{ old('printings.'.$index.'.scryfall_id', $printing['scryfall_id'] ?? '') }}">
+                                        <input type="hidden" name="printings[{{ $index }}][img]" value="{{ old('printings.'.$index.'.img', $printing['img'] ?? '') }}">
+                                        <input type="hidden" name="printings[{{ $index }}][artImg]" value="{{ old('printings.'.$index.'.artImg', $printing['artImg'] ?? '') }}">
                                         <div class="seeded-slot-contents"></div>
                                     </div>
                                 @endforeach
@@ -320,6 +329,15 @@
                         </div>
                     @endforeach
                 </div>
+                <dialog id="printing-dialog" class="printing-dialog" aria-labelledby="printing-title">
+                    <h3 id="printing-title"></h3>
+                    <p id="printing-status" role="status" aria-live="polite"></p>
+                    <div class="actions">
+                        <button type="button" id="printing-default">Use default printing</button>
+                        <button type="button" id="printing-close">Close</button>
+                    </div>
+                    <div class="printing-options" id="printing-options"></div>
+                </dialog>
                 <div class="actions">
                     <button type="submit" id="seeded-save" disabled>{{ $editing ? 'Save changes' : 'Save seeded run' }}</button>
                     @if ($source) <a href="{{ route('admin.dashboard', absolute: false) }}">Cancel</a> @endif
@@ -464,12 +482,30 @@
     const playableBySlug = new Map(playableCards.map(card => [card.slug, card]));
     const savedCards = new Map(@json($sourceCards).map(card => [card.name, card]));
     const seededValues = seededSlots.map(slot => slot.querySelector('input').value);
+    const seededPrintings = seededSlots.map(slot => {
+        const scryfallId = slot.querySelector('[name$="[scryfall_id]"]').value;
+        return scryfallId ? {
+            scryfall_id: scryfallId,
+            img: slot.querySelector('[name$="[img]"]').value,
+            artImg: slot.querySelector('[name$="[artImg]"]').value,
+        } : null;
+    });
+    const printingDialog = document.getElementById('printing-dialog');
+    const printingTitle = document.getElementById('printing-title');
+    const printingStatus = document.getElementById('printing-status');
+    const printingOptions = document.getElementById('printing-options');
+    const printingCache = new Map();
+    let printingIndex = null;
 
     function renderSeededCards() {
         seededSlots.forEach((slot, index) => {
             const slug = seededValues[index];
             const contents = slot.querySelector('.seeded-slot-contents');
+            const printing = seededPrintings[index];
             slot.querySelector('input').value = slug;
+            slot.querySelector('[name$="[scryfall_id]"]').value = printing?.scryfall_id ?? '';
+            slot.querySelector('[name$="[img]"]').value = printing?.img ?? '';
+            slot.querySelector('[name$="[artImg]"]').value = printing?.artImg ?? '';
             contents.replaceChildren();
             if (!slug) {
                 contents.textContent = 'Empty';
@@ -485,7 +521,7 @@
                 drag.className = 'seeded-drag';
                 drag.title = `Drag ${name} to swap positions`;
                 const image = document.createElement('img');
-                image.src = card.image;
+                image.src = printing?.img ?? card.image;
                 image.alt = name;
                 image.draggable = false;
                 const popularity = document.createElement('span');
@@ -505,29 +541,24 @@
             }
             const controls = document.createElement('div');
             controls.className = 'seeded-controls';
-            for (const [label, action, disabled] of [
-                ['←', 'earlier', index === 0],
-                ['→', 'later', index === seededSlots.length - 1],
-                ['×', 'remove', false],
-            ]) {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.textContent = label;
-                button.disabled = disabled;
-                button.setAttribute('aria-label', `${action === 'remove' ? 'Remove' : `Move ${action}`} ${name}`);
-                button.addEventListener('click', () => {
-                    if (action === 'remove') {
-                        seededValues[index] = '';
-                        renderSeededCards();
-                        seededInput.focus();
-                    } else {
-                        const target = index + (action === 'earlier' ? -1 : 1);
-                        swapSeededCards(index, target);
-                        seededSlots[target].querySelector('.seeded-controls button:not([disabled])')?.focus();
-                    }
-                });
-                controls.append(button);
-            }
+            const printingButton = document.createElement('button');
+            printingButton.type = 'button';
+            printingButton.className = 'seeded-printing';
+            printingButton.textContent = '⚙️';
+            printingButton.title = 'Choose printing';
+            printingButton.setAttribute('aria-label', `Choose printing for ${name}`);
+            printingButton.addEventListener('click', () => openPrintingPicker(index));
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.textContent = '×';
+            removeButton.setAttribute('aria-label', `Remove ${name}`);
+            removeButton.addEventListener('click', () => {
+                seededValues[index] = '';
+                seededPrintings[index] = null;
+                renderSeededCards();
+                seededInput.focus();
+            });
+            controls.append(printingButton, removeButton);
             contents.append(controls);
         });
         seededMessage.textContent = `${seededValues.filter(Boolean).length} of 20 cards selected.`;
@@ -535,8 +566,63 @@
 
     function swapSeededCards(from, to) {
         [seededValues[from], seededValues[to]] = [seededValues[to], seededValues[from]];
+        [seededPrintings[from], seededPrintings[to]] = [seededPrintings[to], seededPrintings[from]];
         renderSeededCards();
     }
+
+    async function openPrintingPicker(index) {
+        const slug = seededValues[index];
+        printingIndex = index;
+        printingTitle.textContent = `Choose a printing of ${playableBySlug.get(slug)?.name ?? slug}`;
+        printingOptions.replaceChildren();
+        printingStatus.textContent = 'Loading printings…';
+        printingDialog.showModal();
+        let printings = printingCache.get(slug);
+        try {
+            if (!printings) {
+                const response = await fetch(`/admin/cards/${encodeURIComponent(slug)}/printings`, { headers: { Accept: 'application/json' } });
+                if (!response.ok) throw new Error(`Request failed with ${response.status}`);
+                printings = (await response.json()).printings;
+                printingCache.set(slug, printings);
+            }
+        } catch (error) {
+            console.error('Unable to load printings:', error);
+            if (printingIndex === index) printingStatus.textContent = 'Could not load printings. Please try again.';
+            return;
+        }
+        if (printingIndex !== index || !printingDialog.open) return;
+        printingStatus.textContent = printings.length ? '' : 'No printings found for this card.';
+        for (const printing of printings) {
+            const label = `${printing.set_name} #${printing.collector_number}`;
+            const option = document.createElement('button');
+            option.type = 'button';
+            option.className = 'printing-option';
+            option.setAttribute('aria-pressed', String(seededPrintings[index]?.scryfall_id === printing.scryfall_id));
+            const image = document.createElement('img');
+            image.src = printing.img;
+            image.alt = '';
+            image.loading = 'lazy';
+            const text = document.createElement('span');
+            text.textContent = label;
+            option.append(image, text);
+            option.addEventListener('click', () => choosePrinting(index, printing));
+            printingOptions.append(option);
+        }
+    }
+
+    function choosePrinting(index, printing) {
+        seededPrintings[index] = printing ? {
+            scryfall_id: printing.scryfall_id, img: printing.img, artImg: printing.artImg,
+        } : null;
+        printingIndex = null;
+        printingDialog.close();
+        renderSeededCards();
+        seededSlots[index].querySelector('.seeded-printing')?.focus();
+    }
+
+    document.getElementById('printing-default').addEventListener('click', () => choosePrinting(printingIndex, null));
+    document.getElementById('printing-close').addEventListener('click', () => printingDialog.close());
+    printingDialog.addEventListener('close', () => { printingIndex = null; });
 
     function addSeededCard() {
         const search = seededInput.value.trim().toLowerCase();

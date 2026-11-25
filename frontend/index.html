@@ -1190,7 +1190,7 @@
         const card1Container = document.createElement("div");
         card1Container.className = "result-card";
         const img1 = document.createElement("img");
-        img1.src = card.img;
+        img1.src = cardImageUrl(card, false);
         const winner = card.popularity >= card2.popularity;
         if (winner) {
           card1Container.classList.add("result-winner");
@@ -1207,7 +1207,7 @@
         const card2Container = document.createElement("div");
         card2Container.className = "result-card";
         const img2 = document.createElement("img");
-        img2.src = card2.img;
+        img2.src = cardImageUrl(card2, false);
         if (!winner) {
           card2Container.classList.add("result-winner");
         } else {
@@ -1428,6 +1428,12 @@
       showResultBreakdown();
     }
 
+    // Runs may assign a specific printing to a card; fall back to the default printing otherwise.
+    function cardImageUrl(card, useArt) {
+      const printing = card.printing ?? {};
+      return useArt ? (printing.artImg ?? card.artImg) : (printing.img ?? card.img);
+    }
+
     function showNextPair() {
       if (currentPair >= 10) {
         saveResults();
@@ -1442,7 +1448,7 @@
         const div = document.createElement("div");
         div.className = "card";
         const img = document.createElement("img");
-        img.src = hardMode ? card.artImg : card.img;
+        img.src = cardImageUrl(card, hardMode);
         div.appendChild(img);
         if (hardMode) {
           const overlay = document.createElement("div");

@@ -11,6 +11,7 @@ Route::post('/admin/login', [AdminController::class, 'login'])->middleware('thro
 Route::middleware(AuthenticateAdmin::class)->group(function () {
     Route::get('/admin', [AdminController::class, 'dashboard'])->name('admin.dashboard');
     Route::post('/admin/logout', [AdminController::class, 'logout'])->name('admin.logout');
+    Route::get('/admin/cards/{slug}/printings', [AdminController::class, 'cardPrintings'])->name('admin.cards.printings');
     Route::post('/admin/seeded-runs', [AdminController::class, 'saveSeededRun'])->name('admin.seeded-runs.store');
     Route::put('/admin/seeded-runs/{originalDate}', [AdminController::class, 'saveSeededRun'])->name('admin.seeded-runs.update');
     Route::delete('/admin/seeded-runs/{date}', [AdminController::class, 'deleteSeededRun'])->name('admin.seeded-runs.delete');

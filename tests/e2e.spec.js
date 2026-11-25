@@ -181,6 +181,27 @@ test.describe('Asmrandle E2E Tests', () => {
         expect(await page.evaluate(() => resultToCopy)).toContain('🟥🟩🟩🟩🟩🟩🟩🟩🟩🟩');
     });
 
+    test('Cards use their assigned printing, including its art crop in hard mode', async ({ page }) => {
+        const date = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        await page.route('**/api/games', route => route.fulfill({ json: { id: date, date, logo: 'standard', perfectScoreEmojis: '' } }));
+        await page.route('**/api/games/*/rounds/*', route => route.fulfill({ json: { cards: [
+            { name: 'first', popularity: 80, img: '/images/default.png', artImg: '/images/default-art.png', flavorText: '', printing: { img: '/images/printing.png', artImg: '/images/printing-art.png' } },
+            { name: 'second', popularity: 20, img: '/images/default.png', artImg: '/images/default-art.png', flavorText: '' },
+        ] } }));
+        await page.goto(BASE_URL);
+        await page.click('#play-random');
+        await page.waitForSelector('.card img');
+        await expect(page.locator('.card img').nth(0)).toHaveAttribute('src', '/images/printing.png');
+        await expect(page.locator('.card img').nth(1)).toHaveAttribute('src', '/images/default.png');
+
+        await page.reload();
+        await page.check('#hard-mode');
+        await page.click('#play-random');
+        await page.waitForSelector('.card img');
+        await expect(page.locator('.card img').nth(0)).toHaveAttribute('src', '/images/printing-art.png');
+        await expect(page.locator('.card img').nth(1)).toHaveAttribute('src', '/images/default-art.png');
+    });
+
     test('Practice game button functionality', async ({ page }) => {
         await page.goto(BASE_URL);
         

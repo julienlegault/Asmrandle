@@ -426,6 +426,82 @@ class GameApiTest extends TestCase
         }
     }
 
+    public function test_development_id_resolution_preserves_card_data_and_is_repeatable(): void
+    {
+        DB::table('cards')->where('slug', 'card-0')->update(['scryfall_id' => 'dev-card-0']);
+        DB::table('cards')->where('slug', 'card-1')->update(['scryfall_id' => 'dev-card-1']);
+        $before = DB::table('cards')->where('slug', 'card-0')->first();
+        $oracleId = '4457ed35-7c10-48c8-9776-456485fdf070';
+        $cards = [
+            ['name' => 'Card 0 // Other', 'oracle_id' => '2b93787d-47ea-4b8b-912d-ffc5d5440171'],
+            ['name' => 'Card 0', 'oracle_id' => $oracleId],
+            ['name' => 'Card 2', 'oracle_id' => '6a3c1b2e-4f5d-4e6a-9b7c-8d9e0f1a2b3c'],
+        ];
+        for ($i = 0; $i < 18; $i++) {
+            $cards[] = ['name' => "Other $i"];
+        }
+        $this->fakeScryfallBulk($cards);
+
+        $this->app['env'] = 'local';
+        try {
+            $this->artisan('cards:import', ['--resolve-development-ids' => true])
+                ->expectsOutput('Resolved 1 development card IDs.')
+                ->expectsOutput('1 development card IDs could not be resolved.')
+                ->assertSuccessful();
+            $after = DB::table('cards')->where('slug', 'card-0')->first();
+            $this->assertSame($oracleId, $after->scryfall_id);
+            $this->assertSame($before->id, $after->id);
+            $this->assertSame($before->inclusion, $after->inclusion);
+            $this->assertSame($before->image_url, $after->image_url);
+            $this->assertSame('dev-card-1', DB::table('cards')->where('slug', 'card-1')->value('scryfall_id'));
+            $this->assertSame('id-2', DB::table('cards')->where('slug', 'card-2')->value('scryfall_id'));
+
+            $this->artisan('cards:import', ['--resolve-development-ids' => true])
+                ->expectsOutput('Resolved 0 development card IDs.')
+                ->assertSuccessful();
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+    }
+
+    public function test_development_id_resolution_rolls_back_incomplete_imports(): void
+    {
+        DB::table('cards')->where('slug', 'card-0')->update(['scryfall_id' => 'dev-card-0']);
+        $this->fakeScryfallBulk([['name' => 'Card 0', 'oracle_id' => '4457ed35-7c10-48c8-9776-456485fdf070']]);
+        $this->app['env'] = 'local';
+        try {
+            try {
+                $this->artisan('cards:import', ['--resolve-development-ids' => true])->run();
+                $this->fail('An incomplete import should fail.');
+            } catch (\RuntimeException $exception) {
+                $this->assertStringContainsString('incomplete', $exception->getMessage());
+            }
+            $this->assertSame('dev-card-0', DB::table('cards')->where('slug', 'card-0')->value('scryfall_id'));
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+    }
+
+    public function test_development_id_resolution_requires_local_environment(): void
+    {
+        Http::fake();
+        $this->artisan('cards:import', ['--resolve-development-ids' => true])->assertFailed();
+        Http::assertNothingSent();
+    }
+
+    private function fakeScryfallBulk(array $cards): void
+    {
+        $lines = implode("\n", array_map(fn ($card) => json_encode($card, JSON_THROW_ON_ERROR), $cards))."\n";
+        $gzip = gzencode($lines);
+        Http::fake(fn ($request) => str_contains($request->url(), '/bulk-data')
+            ? Http::response(['data' => [[
+                'type' => 'oracle_cards',
+                'jsonl_download_uri' => 'https://data.example.test/oracle.jsonl.gz',
+                'compressed_size' => strlen($gzip),
+            ]]])
+            : Http::response($gzip));
+    }
+
     public function test_first_ten_can_be_marked_as_copied(): void
     {
         $this->postJson('/api/games', ['mode' => 'daily'])->assertOk();

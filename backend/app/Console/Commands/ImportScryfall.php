@@ -6,11 +6,14 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class ImportScryfall extends Command
 {
-    protected $signature = 'cards:import {--seed-random : Seed missing popularity values for local development}';
+    protected $signature = 'cards:import
+        {--seed-random : Seed missing popularity values for local development}
+        {--resolve-development-ids : Replace development placeholder IDs with Scryfall oracle IDs}';
 
     protected $description = 'Import Scryfall oracle cards into the database';
 
@@ -18,6 +21,17 @@ class ImportScryfall extends Command
     {
         if ($this->option('seed-random') && ! app()->environment('local')) {
             $this->error('Random popularity data is only allowed in the local environment.');
+
+            return self::FAILURE;
+        }
+
+        if ($this->option('resolve-development-ids') && ! app()->environment('local')) {
+            $this->error('Resolving development IDs is only allowed in the local environment.');
+
+            return self::FAILURE;
+        }
+        if ($this->option('resolve-development-ids') && $this->option('seed-random')) {
+            $this->error('The development ID resolver cannot be combined with --seed-random.');
 
             return self::FAILURE;
         }
@@ -65,7 +79,11 @@ class ImportScryfall extends Command
                 throw new RuntimeException('Unable to open the Scryfall download.');
             }
             try {
-                $this->import($stream);
+                if ($this->option('resolve-development-ids')) {
+                    $this->resolveDevelopmentIds($stream);
+                } else {
+                    $this->import($stream);
+                }
             } finally {
                 gzclose($stream);
             }
@@ -85,14 +103,69 @@ class ImportScryfall extends Command
         return preg_replace('/\s+/', '-', trim($name));
     }
 
-    private function import($stream): void
+    private function knownSlugs(): array
     {
         $list = file_get_contents(base_path('data/formatted_card_list.js'));
         if ($list === false) {
             throw new RuntimeException('Could not read the existing card list.');
         }
         preg_match_all('/^\s*"([^"]+)"\s*,?\s*$/m', $list, $matches);
-        $known = array_fill_keys($matches[1], true);
+
+        return array_fill_keys($matches[1], true);
+    }
+
+    private function cardSlug(string $name, array $known): string
+    {
+        $firstName = trim(explode('//', $name)[0]);
+        $first = $this->slug($firstName);
+        $combined = $this->slug(str_replace('//', '', $name));
+
+        return isset($known[$combined]) ? $combined : $first;
+    }
+
+    private function resolveDevelopmentIds($stream): void
+    {
+        $known = $this->knownSlugs();
+        $placeholders = DB::table('cards')->where('scryfall_id', 'like', 'dev-%')->pluck('scryfall_id', 'slug')->all();
+        $resolved = 0;
+        $count = 0;
+        $matches = [];
+
+        DB::transaction(function () use ($stream, $known, &$placeholders, &$resolved, &$count, &$matches) {
+            while (($line = gzgets($stream)) !== false) {
+                $card = json_decode($line, true, flags: JSON_THROW_ON_ERROR);
+                $count++;
+                $name = $card['name'] ?? '';
+                $slug = $this->cardSlug($name, $known);
+                $oracleId = $card['oracle_id'] ?? null;
+                if (($placeholders[$slug] ?? null) !== 'dev-'.$slug || ! is_string($oracleId) || ! Str::isUuid($oracleId)) {
+                    continue;
+                }
+                $priority = $slug === $this->slug(str_replace('//', '', $name)) ? 2 : 1;
+                if ($priority > ($matches[$slug]['priority'] ?? 0)) {
+                    $matches[$slug] = ['id' => $oracleId, 'priority' => $priority];
+                }
+            }
+            if (! gzeof($stream) || $count < 20) {
+                throw new RuntimeException('Scryfall download was incomplete or contained too few cards.');
+            }
+            foreach ($matches as $slug => $match) {
+                DB::table('cards')->where('slug', $slug)->where('scryfall_id', 'dev-'.$slug)
+                    ->update(['scryfall_id' => $match['id'], 'updated_at' => now()]);
+                unset($placeholders[$slug]);
+                $resolved++;
+            }
+        }, 1);
+
+        $this->info("Resolved {$resolved} development card IDs.");
+        if (count($placeholders)) {
+            $this->warn(count($placeholders).' development card IDs could not be resolved.');
+        }
+    }
+
+    private function import($stream): void
+    {
+        $known = $this->knownSlugs();
         $excluded = array_fill_keys(['cleanse', 'crusade', 'jihad', 'imprison', 'invoke-prejudice', 'pradesh-gypsies', 'stone-throwing-devils'], true);
         $seen = [];
         $count = 0;
@@ -102,10 +175,7 @@ class ImportScryfall extends Command
             while (($line = gzgets($stream)) !== false) {
                 $card = json_decode($line, true, flags: JSON_THROW_ON_ERROR);
                 $name = $card['name'] ?? '';
-                $firstName = trim(explode('//', $name)[0]);
-                $first = $this->slug($firstName);
-                $combined = $this->slug(str_replace('//', '', $name));
-                $slug = isset($known[$combined]) ? $combined : $first;
+                $slug = $this->cardSlug($name, $known);
                 $image = $card['image_uris']['normal'] ?? $card['card_faces'][0]['image_uris']['normal'] ?? null;
                 $art = $card['image_uris']['art_crop'] ?? $card['card_faces'][0]['image_uris']['art_crop'] ?? $image;
                 if (($card['legalities']['commander'] ?? null) !== 'legal' || ! $image || ! $slug || isset($excluded[$slug]) || isset($seen[$slug])) {
