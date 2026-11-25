@@ -183,7 +183,6 @@
                 <strong>{{ number_format($allTimeAverageScore, 2) }}</strong>
             </div>
         </div>
-        <p class="muted">Duration statistics include recorded daily and practice games; older games without timing are excluded. Speedy Runs are under 60 seconds.</p>
     </div>
     
     <!-- Two-column content: Daily stats and Schedule run -->
