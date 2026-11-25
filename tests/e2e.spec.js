@@ -278,6 +278,36 @@ test.describe('Asmrandle E2E Tests', () => {
         await expect(page.locator('#welcome-text')).toBeHidden();
     });
 
+    test('Welcome text breathes and glows together unless reduced motion is requested', async ({ page }) => {
+        await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false, logo: 'standard', welcomeText: 'Welcome!' } }));
+        await page.goto(BASE_URL);
+        const text = page.locator('#welcome-text');
+        await expect(text).toHaveText('Welcome!');
+        const frames = await text.evaluate(element => {
+            const animation = element.getAnimations()[0];
+            animation.pause();
+            return [0, 750, 1500, 2250].map(time => {
+                animation.currentTime = time;
+                const style = getComputedStyle(element);
+                const matrix = new DOMMatrix(style.transform);
+                const blur = Number(style.textShadow.match(/ ([\d.]+)px$/)[1]);
+                return { scale: Math.hypot(matrix.a, matrix.b), blur, shadow: style.textShadow };
+            });
+        });
+        expect(frames[1].scale).toBeGreaterThan(frames[0].scale);
+        expect(frames[2].scale).toBeGreaterThan(frames[1].scale);
+        expect(frames[3].scale).toBeLessThan(frames[2].scale);
+        expect(frames[3].scale).toBeGreaterThan(frames[0].scale);
+        expect(frames[1].blur).toBeGreaterThan(frames[0].blur);
+        expect(frames[2].blur).toBeGreaterThan(frames[1].blur);
+        expect(frames[3].blur).toBeLessThan(frames[2].blur);
+        expect(frames[3].blur).toBeGreaterThan(frames[0].blur);
+        expect(frames[2].shadow).toContain('rgba(255, 230, 0, 0.9)');
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await expect(text).toHaveCSS('animation-name', 'none');
+        await expect(text).toHaveCSS('text-shadow', 'none');
+    });
+
     test('Longest welcome text fits on a narrow landing page', async ({ page }) => {
         await page.setViewportSize({ width: 320, height: 700 });
         await page.route('**/api/config', route => route.fulfill({ json: { fastModeAvailable: false, logo: 'standard', welcomeText: 'W'.repeat(40) } }));
