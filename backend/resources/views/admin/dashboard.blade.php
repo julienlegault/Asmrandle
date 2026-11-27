@@ -313,6 +313,11 @@
                 <datalist id="playable-cards"></datalist>
                 <p id="seeded-message" role="status" aria-live="polite"></p>
                 <noscript><p class="errors">JavaScript is required to select and organize cards.</p></noscript>
+                <div class="actions">
+                    <button type="button" id="seeded-shuffle">Shuffle</button>
+                    <button type="button" id="seeded-easy">Easy</button>
+                    <button type="button" id="seeded-hard">Hard</button>
+                </div>
                 <div class="pairs" id="seeded-pairs">
                     @foreach (range(0, 9) as $round)
                         <div class="pair">
@@ -573,6 +578,83 @@
         [seededValues[from], seededValues[to]] = [seededValues[to], seededValues[from]];
         [seededPrintings[from], seededPrintings[to]] = [seededPrintings[to], seededPrintings[from]];
         renderSeededCards();
+    }
+
+    function shuffleCards(items) {
+        for (let i = items.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [items[i], items[j]] = [items[j], items[i]];
+        }
+    }
+
+    function organizeSeededCards(mode) {
+        const slots = seededValues.map((slug, index) => ({
+            slug,
+            printing: seededPrintings[index],
+            popularity: playableBySlug.get(slug)?.popularity ?? savedCards.get(slug)?.popularity,
+        }));
+        const selected = slots.filter(card => card.slug);
+        if (mode === 'shuffle' && selected.length === 0) {
+            seededMessage.textContent = 'Select at least one card to shuffle.';
+            return;
+        }
+        if (mode !== 'shuffle' && selected.length < 2) {
+            seededMessage.textContent = 'Select at least two cards to organize.';
+            return;
+        }
+        const cards = mode === 'shuffle' ? slots : selected;
+        if (mode === 'shuffle') {
+            shuffleCards(cards);
+        } else {
+            if (cards.some(card => !Number.isFinite(card.popularity))) {
+                seededMessage.textContent = 'Cannot organize cards without inclusion percentages.';
+                return;
+            }
+            cards.sort((a, b) => a.popularity - b.popularity);
+            if (mode === 'easy') {
+                const paired = [];
+                let low = 0;
+                let high = cards.length - 1;
+                while (low <= high) {
+                    paired.push(cards[low++]);
+                    if (low <= high) paired.push(cards[high--]);
+                }
+                cards.splice(0, cards.length, ...paired);
+            } else if (cards.length % 2) {
+                let bestIndex = 0;
+                let bestDifference = Infinity;
+                // In sorted order, an optimal unpaired card has an even index.
+                for (let index = 0; index < cards.length; index += 2) {
+                    const paired = cards.filter((_, i) => i !== index);
+                    let difference = 0;
+                    for (let i = 0; i < paired.length; i += 2) {
+                        difference += paired[i + 1].popularity - paired[i].popularity;
+                    }
+                    if (difference < bestDifference) {
+                        bestDifference = difference;
+                        bestIndex = index;
+                    }
+                }
+                cards.push(cards.splice(bestIndex, 1)[0]);
+            }
+            const unpaired = cards.length % 2 ? cards.pop() : null;
+            const pairs = [];
+            for (let i = 0; i < cards.length; i += 2) {
+                pairs.push([cards[i], cards[i + 1]]);
+            }
+            shuffleCards(pairs);
+            cards.splice(0, cards.length, ...pairs.flat());
+            if (unpaired) cards.push(unpaired);
+        }
+        seededSlots.forEach((slot, index) => {
+            seededValues[index] = cards[index]?.slug ?? '';
+            seededPrintings[index] = cards[index]?.printing ?? null;
+        });
+        renderSeededCards();
+    }
+
+    for (const mode of ['shuffle', 'easy', 'hard']) {
+        document.getElementById(`seeded-${mode}`).addEventListener('click', () => organizeSeededCards(mode));
     }
 
     async function openPrintingPicker(index) {

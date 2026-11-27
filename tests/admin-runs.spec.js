@@ -20,6 +20,14 @@ function renderDashboard(query = '') {
             'art_url' => 'https://example.test/current-art.jpg', 'inclusion' => 1,
             'potential_decks' => 100, 'legal' => true, 'created_at' => now(), 'updated_at' => now(),
         ]);
+        foreach ([1, 4, 5, 9, 10, 100] as $i => $inclusion) {
+            Illuminate\\Support\\Facades\\DB::table('cards')->insert([
+                'scryfall_id' => "sort-$i", 'slug' => "sort-$i", 'name' => "Sort card $i",
+                'image_url' => 'https://example.test/current.jpg', 'art_url' => 'https://example.test/art.jpg',
+                'inclusion' => $inclusion, 'potential_decks' => 100, 'legal' => true,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
         $cards[0]['printing'] = ['img' => 'https://example.test/printing.jpg'];
         $cards[2]['img'] = null;
         foreach (range(-6, 5) as $offset) {
@@ -56,6 +64,76 @@ function renderDashboard(query = '') {
         encoding: 'utf8',
     });
 }
+
+test('organizes selected cards and keeps their printings', async ({ page }) => {
+    const html = renderDashboard();
+    await page.route('http://admin.test/admin', route => route.fulfill({ contentType: 'text/html', body: html }));
+    await page.route('http://admin.test/admin/cards/sort-1/printings', route => route.fulfill({
+        json: { printings: [{
+            scryfall_id: '11111111-2222-4333-8444-555555555555',
+            img: 'https://cards.scryfall.io/normal/test.jpg',
+            artImg: 'https://cards.scryfall.io/art_crop/test.jpg',
+            set_name: 'Test set', collector_number: '1',
+        }] },
+    }));
+    await page.goto('http://admin.test/admin');
+    const editor = page.locator('#seeded-editor');
+    const slots = editor.locator('.seeded-slot');
+    const values = () => slots.locator('input[name^="cards"]').evaluateAll(inputs => inputs.map(input => input.value));
+    const message = editor.locator('#seeded-message');
+    await editor.getByRole('button', { name: 'Easy', exact: true }).click();
+    await expect(message).toHaveText('Select at least two cards to organize.');
+    await editor.getByRole('button', { name: 'Shuffle', exact: true }).click();
+    await expect(message).toHaveText('Select at least one card to shuffle.');
+    await page.evaluate(() => { Math.random = () => 0; });
+
+    for (const i of [3, 0, 5, 1, 4, 2]) {
+        await editor.getByLabel('Add a card').fill(`Sort card ${i}`);
+        await editor.getByRole('button', { name: 'Add card' }).click();
+        if (i === 3) {
+            await editor.getByRole('button', { name: 'Shuffle', exact: true }).click();
+            expect(await values()).toEqual([...Array(19).fill(''), 'sort-3']);
+        }
+    }
+    await editor.getByRole('button', { name: 'Choose printing for Sort card 1' }).click();
+    await page.getByRole('button', { name: 'Test set #1' }).click();
+    const assertPrinting = async index => {
+        await expect(slots.nth(index).locator('[name$="[scryfall_id]"]')).toHaveValue('11111111-2222-4333-8444-555555555555');
+        await expect(slots.nth(index).locator('img')).toHaveAttribute('src', 'https://cards.scryfall.io/normal/test.jpg');
+    };
+
+    await editor.getByRole('button', { name: 'Easy', exact: true }).click();
+    expect((await values()).slice(0, 6)).toEqual(['sort-1', 'sort-4', 'sort-2', 'sort-3', 'sort-0', 'sort-5']);
+    await assertPrinting(0);
+    await editor.getByRole('button', { name: 'Hard', exact: true }).click();
+    expect((await values()).slice(0, 6)).toEqual(['sort-2', 'sort-3', 'sort-4', 'sort-5', 'sort-0', 'sort-1']);
+    await assertPrinting(5);
+
+    await editor.getByRole('button', { name: 'Remove Sort card 5' }).click();
+    await editor.getByRole('button', { name: 'Hard', exact: true }).click();
+    expect((await values()).slice(0, 5)).toEqual(['sort-3', 'sort-4', 'sort-1', 'sort-2', 'sort-0']);
+    await assertPrinting(2);
+    await editor.getByLabel('Add a card').fill('Sort card 5');
+    await editor.getByRole('button', { name: 'Add card' }).click();
+    await editor.getByRole('button', { name: 'Remove Sort card 2' }).click();
+    await editor.getByRole('button', { name: 'Easy', exact: true }).click();
+    expect(await values()).toEqual(['sort-1', 'sort-4', 'sort-0', 'sort-5', 'sort-3', ...Array(15).fill('')]);
+    await assertPrinting(0);
+    await editor.getByRole('button', { name: 'Shuffle', exact: true }).click();
+    expect(await values()).toEqual(['sort-4', 'sort-0', 'sort-5', 'sort-3', ...Array(15).fill(''), 'sort-1']);
+    await assertPrinting(19);
+
+    await page.evaluate(() => { playableBySlug.delete('sort-1'); });
+    const before = await values();
+    await editor.getByRole('button', { name: 'Hard', exact: true }).click();
+    await expect(message).toHaveText('Cannot organize cards without inclusion percentages.');
+    expect(await values()).toEqual(before);
+    await assertPrinting(19);
+    await page.evaluate(() => { savedCards.set('sort-1', { popularity: 4 }); });
+    await editor.getByRole('button', { name: 'Hard', exact: true }).click();
+    expect((await values()).slice(0, 5)).toEqual(['sort-3', 'sort-4', 'sort-0', 'sort-1', 'sort-5']);
+    await assertPrinting(3);
+});
 
 test('changing dates updates daily results without losing editor state and supports history', async ({ page }) => {
     const todayPage = renderDashboard();
