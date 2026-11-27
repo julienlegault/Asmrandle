@@ -58,6 +58,10 @@
         .seeded-picker { display: flex; align-items: end; gap: .5rem; flex-wrap: wrap; }
         .seeded-picker label { flex: 1 1 15rem; }
         .seeded-picker input { width: 100%; }
+        .seeded-suggestions { width: min(100%, 32rem); max-height: 16rem; overflow-y: auto; margin: .25rem 0; padding: 0; list-style: none; background: #1a1d26; border: 1px solid #70758c; border-radius: .3rem; }
+        .seeded-suggestions[hidden] { display: none; }
+        .seeded-suggestions [role="option"] { padding: .5rem; cursor: pointer; overflow-wrap: anywhere; }
+        .seeded-suggestions [role="option"]:hover, .seeded-suggestions [aria-selected="true"] { background: #3a3f4f; }
         .seeded-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
         .seeded-slot { min-height: 135px; border: 1px dashed #70758c; border-radius: .3rem; padding: .25rem; }
         .seeded-slot.is-target { outline: 3px solid #8bb9ff; }
@@ -307,12 +311,11 @@
                 </div>
                 <div class="seeded-picker">
                     <label>Add a card
-                        <input id="seeded-card-input" type="text" list="playable-cards" autocomplete="off" placeholder="Search by card name">
+                        <input id="seeded-card-input" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="playable-cards" autocomplete="off" placeholder="Search by card name">
                     </label>
-                    <button type="button" id="seeded-add-card">Add card</button>
                     <button type="button" id="seeded-bulk-open">Bulk Input</button>
                 </div>
-                <datalist id="playable-cards"></datalist>
+                <ul id="playable-cards" class="seeded-suggestions" role="listbox" aria-label="Card suggestions" hidden></ul>
                 <div class="actions">
                     <button type="button" id="seeded-fill-missing">Fill missing</button>
                     <button type="button" id="seeded-shuffle">Shuffle</button>
@@ -729,6 +732,41 @@
         return playableCards.filter(card => card.name.toLowerCase() === search);
     }
 
+    let activeSuggestion = -1;
+
+    function closeSeededSuggestions() {
+        seededSuggestions.hidden = true;
+        seededInput.setAttribute('aria-expanded', 'false');
+        seededInput.removeAttribute('aria-activedescendant');
+        activeSuggestion = -1;
+    }
+
+    function updateSeededSuggestions() {
+        const search = seededInput.value.trim().toLowerCase();
+        const matches = search ? playableCards.filter(card => card.name.toLowerCase().includes(search)).slice(0, 50) : [];
+        const options = document.createDocumentFragment();
+        matches.forEach((card, index) => {
+            const option = document.createElement('li');
+            option.id = `card-suggestion-${index}`;
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', 'false');
+            option.tabIndex = -1;
+            option.textContent = card.name;
+            options.append(option);
+        });
+        seededSuggestions.replaceChildren(options);
+        closeSeededSuggestions();
+        if (matches.length) {
+            seededSuggestions.hidden = false;
+            seededInput.setAttribute('aria-expanded', 'true');
+        }
+    }
+
+    function selectSeededSuggestion(option) {
+        seededInput.value = option.textContent;
+        addSeededCard();
+    }
+
     function addSeededCard() {
         const matches = findPlayableCards(seededInput.value);
         if (matches.length !== 1) {
@@ -743,6 +781,7 @@
             seededSuggestions.replaceChildren();
             renderSeededCards();
         }
+        closeSeededSuggestions();
         seededInput.focus();
     }
 
@@ -790,18 +829,23 @@
         else bulkDialog.close();
     });
 
-    seededInput.addEventListener('input', () => {
-        const search = seededInput.value.trim().toLowerCase();
-        seededSuggestions.replaceChildren();
-        if (!search) return;
-        const matches = playableCards.filter(card => card.name.toLowerCase().includes(search)).slice(0, 50);
-        for (const card of matches) {
-            const option = document.createElement('option');
-            option.value = card.name;
-            seededSuggestions.append(option);
-        }
+    seededInput.addEventListener('input', updateSeededSuggestions);
+    seededInput.addEventListener('focus', updateSeededSuggestions);
+    seededSuggestions.addEventListener('mousedown', event => event.preventDefault());
+    seededSuggestions.addEventListener('click', event => {
+        const option = event.target.closest('[role="option"]');
+        if (option) selectSeededSuggestion(option);
     });
-    document.getElementById('seeded-add-card').addEventListener('click', addSeededCard);
+    let suggestionPointerDown = false;
+    document.addEventListener('pointerdown', () => { suggestionPointerDown = true; });
+    document.addEventListener('pointerup', () => { suggestionPointerDown = false; });
+    document.addEventListener('pointercancel', () => { suggestionPointerDown = false; });
+    document.addEventListener('click', event => {
+        if (event.target !== seededInput && !seededSuggestions.contains(event.target)) closeSeededSuggestions();
+    });
+    document.addEventListener('focusin', event => {
+        if (!suggestionPointerDown && event.target !== seededInput && !seededSuggestions.contains(event.target)) closeSeededSuggestions();
+    });
     document.getElementById('seeded-fill-missing').addEventListener('click', () => {
         const missing = seededValues.filter(value => !value).length;
         if (!missing) {
@@ -823,9 +867,32 @@
         seededMessage.textContent = `Filled ${missing} missing ${missing === 1 ? 'slot' : 'slots'} with random cards.`;
     });
     seededInput.addEventListener('keydown', event => {
-        if (event.key === 'Enter') {
+        if (event.isComposing) return;
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            if (seededSuggestions.hidden) updateSeededSuggestions();
+            const options = seededSuggestions.children;
+            if (!options.length || seededSuggestions.hidden) return;
             event.preventDefault();
-            addSeededCard();
+            if (activeSuggestion >= 0) options[activeSuggestion].setAttribute('aria-selected', 'false');
+            activeSuggestion = event.key === 'ArrowDown'
+                ? (activeSuggestion + 1) % options.length
+                : (activeSuggestion < 0 ? options.length - 1 : (activeSuggestion - 1 + options.length) % options.length);
+            const option = options[activeSuggestion];
+            option.setAttribute('aria-selected', 'true');
+            seededInput.setAttribute('aria-activedescendant', option.id);
+            option.scrollIntoView({ block: 'nearest' });
+        } else if (event.key === 'Escape' && !seededSuggestions.hidden) {
+            event.preventDefault();
+            closeSeededSuggestions();
+        } else if (event.key === 'Tab') {
+            closeSeededSuggestions();
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            if (!seededSuggestions.hidden && activeSuggestion >= 0) {
+                selectSeededSuggestion(seededSuggestions.children[activeSuggestion]);
+            } else {
+                addSeededCard();
+            }
         }
     });
     document.querySelector('.seeded-form').addEventListener('submit', event => {

@@ -65,6 +65,114 @@ function renderDashboard(query = '') {
     });
 }
 
+test('card suggestions support keyboard and pointer selection without covering controls', async ({ page }) => {
+    const html = renderDashboard();
+    await page.route('http://admin.test/admin', route => route.fulfill({ contentType: 'text/html', body: html }));
+    await page.goto('http://admin.test/admin');
+    const editor = page.locator('#seeded-editor');
+    const input = editor.getByRole('combobox', { name: 'Add a card' });
+    const list = editor.getByRole('listbox', { name: 'Card suggestions' });
+    const options = list.getByRole('option');
+    await expect(editor.getByRole('button', { name: 'Add card', exact: true })).toHaveCount(0);
+    await input.fill('sort card');
+    await expect(input).toHaveAttribute('aria-expanded', 'true');
+    await expect(options).toHaveCount(6);
+    expect((await list.boundingBox()).y).toBeGreaterThanOrEqual((await input.boundingBox()).y + (await input.boundingBox()).height);
+    expect((await editor.getByRole('button', { name: 'Fill missing' }).boundingBox()).y)
+        .toBeGreaterThanOrEqual((await list.boundingBox()).y + (await list.boundingBox()).height);
+    await expect(list).toHaveCSS('background-color', 'rgb(26, 29, 38)');
+
+    await input.press('ArrowDown');
+    await expect(input).toHaveAttribute('aria-activedescendant', 'card-suggestion-0');
+    await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true');
+    await input.press('ArrowDown');
+    await expect(input).toHaveAttribute('aria-activedescendant', 'card-suggestion-1');
+    await expect(options.nth(0)).toHaveAttribute('aria-selected', 'false');
+    await input.press('Enter');
+    await expect(editor.locator('.seeded-slot').first().locator('input').first()).toHaveValue('sort-1');
+    await expect(input).toHaveValue('');
+    await expect(input).toHaveAttribute('aria-expanded', 'false');
+    await expect(input).not.toHaveAttribute('aria-activedescendant');
+
+    await input.fill('sort card');
+    await options.filter({ hasText: 'Sort card 3' }).click();
+    await expect(editor.locator('.seeded-slot').nth(1).locator('input').first()).toHaveValue('sort-3');
+    await expect(input).toHaveValue('');
+    await expect(input).toBeFocused();
+    await expect(list).toBeHidden();
+
+    await input.fill('sort card 3');
+    await options.filter({ hasText: 'Sort card 3' }).click();
+    await expect(editor.locator('#seeded-message')).toHaveText('That card is already selected.');
+    await expect(input).toHaveValue('Sort card 3');
+
+    await input.fill('sort');
+    await input.press('ArrowUp');
+    await expect(input).toHaveAttribute('aria-activedescendant', 'card-suggestion-5');
+    await input.press('Escape');
+    await expect(input).toHaveAttribute('aria-expanded', 'false');
+    await expect(input).not.toHaveAttribute('aria-activedescendant');
+    await input.press('ArrowDown');
+    await expect(list).toBeVisible();
+    await input.press('Tab');
+    await expect(list).toBeHidden();
+
+    await input.fill('sort');
+    await editor.getByRole('button', { name: 'Fill missing' }).click();
+    await expect(editor.locator('#seeded-message')).toHaveText('Not enough distinct playable cards are available to fill the missing slots.');
+    await expect(list).toBeHidden();
+    await input.fill('no matching cards');
+    await expect(input).toHaveAttribute('aria-expanded', 'false');
+    await expect(list).toBeHidden();
+    await input.press('Enter');
+    await expect(editor.locator('#seeded-message')).toHaveText('Choose a playable card from the suggestions.');
+    await page.evaluate(() => {
+        for (let i = 0; i < 51; i++) playableCards.push({ name: `Suggestion ${i}` });
+    });
+    await input.fill('suggestion');
+    await expect(options).toHaveCount(50);
+    await input.fill('');
+    await expect(list).toBeHidden();
+
+    await page.evaluate(() => {
+        for (let i = 0; i < 18; i++) {
+            const card = { slug: `extra-${i}`, name: `Extra ${i}`, image: 'https://example.test/card.jpg', popularity: 1 };
+            playableCards.push(card);
+            playableBySlug.set(card.slug, card);
+        }
+    });
+    await editor.getByRole('button', { name: 'Bulk Input' }).click();
+    await page.getByLabel('Card names, one per line').fill(Array.from({ length: 18 }, (_, i) => `Extra ${i}`).join('\n'));
+    await page.getByRole('dialog', { name: 'Bulk Input' }).getByRole('button', { name: 'Save' }).click();
+    await input.fill('Sort card 4');
+    await input.press('ArrowDown');
+    await input.press('Enter');
+    await expect(editor.locator('#seeded-message')).toHaveText('All 20 slots are filled. Remove a card first.');
+    await expect(input).toHaveValue('Sort card 4');
+    expect(await editor.locator('.seeded-slot input[name^="cards"]').evaluateAll(inputs => inputs.map(input => input.value)))
+        .toEqual(['sort-1', 'sort-3', ...Array.from({ length: 18 }, (_, i) => `extra-${i}`)]);
+});
+
+test.describe('touch card suggestions', () => {
+    test.use({ hasTouch: true });
+
+    test('selects a suggestion by touch', async ({ page }) => {
+        const html = renderDashboard();
+        await page.route('http://admin.test/admin', route => route.fulfill({ contentType: 'text/html', body: html }));
+        await page.setViewportSize({ width: 320, height: 800 });
+        await page.goto('http://admin.test/admin');
+        const input = page.getByRole('combobox', { name: 'Add a card' });
+        await input.fill('sort card');
+        const list = page.getByRole('listbox', { name: 'Card suggestions' });
+        expect((await list.boundingBox()).y).toBeGreaterThanOrEqual((await input.boundingBox()).y + (await input.boundingBox()).height);
+        expect((await list.boundingBox()).width).toBeLessThanOrEqual(320);
+        await page.getByRole('option', { name: 'Sort card 2' }).tap();
+        await expect(page.locator('.seeded-slot').first().locator('input').first()).toHaveValue('sort-2');
+        await expect(input).toHaveValue('');
+        await expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+});
+
 test('bulk input adds valid cards and retains only errors for correction', async ({ page }) => {
     const html = renderDashboard();
     await page.route('http://admin.test/admin', route => route.fulfill({ contentType: 'text/html', body: html }));
@@ -81,7 +189,7 @@ test('bulk input adds valid cards and retains only errors for correction', async
     await expect(editor.locator('.actions').first()).toContainText('Shuffle');
 
     await editor.getByLabel('Add a card').fill('Sort card 0');
-    await editor.getByRole('button', { name: 'Add card' }).click();
+    await editor.getByLabel('Add a card').press('Enter');
     await editor.getByRole('button', { name: 'Bulk Input' }).click();
     await expect(input).toBeFocused();
     await input.fill(' sort CARD 1 \nMissing card\n\nSort card 2\nSort card 0\nSort card 1');
@@ -152,7 +260,7 @@ test('organizes selected cards and keeps their printings', async ({ page }) => {
 
     for (const i of [3, 0, 5, 1, 4, 2]) {
         await editor.getByLabel('Add a card').fill(`Sort card ${i}`);
-        await editor.getByRole('button', { name: 'Add card' }).click();
+        await editor.getByLabel('Add a card').press('Enter');
         if (i === 3) {
             await editor.getByRole('button', { name: 'Shuffle', exact: true }).click();
             expect(await values()).toEqual([...Array(19).fill(''), 'sort-3']);
@@ -177,7 +285,7 @@ test('organizes selected cards and keeps their printings', async ({ page }) => {
     expect((await values()).slice(0, 5)).toEqual(['sort-3', 'sort-4', 'sort-1', 'sort-2', 'sort-0']);
     await assertPrinting(2);
     await editor.getByLabel('Add a card').fill('Sort card 5');
-    await editor.getByRole('button', { name: 'Add card' }).click();
+    await editor.getByLabel('Add a card').press('Enter');
     await editor.getByRole('button', { name: 'Remove Sort card 2' }).click();
     await editor.getByRole('button', { name: 'Easy', exact: true }).click();
     expect(await values()).toEqual(['sort-1', 'sort-4', 'sort-0', 'sort-5', 'sort-3', ...Array(15).fill('')]);

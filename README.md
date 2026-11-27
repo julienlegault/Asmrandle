@@ -90,6 +90,8 @@ lowest inclusion rates with the highest, while Hard pairs adjacent inclusion
 rates. Easy and Hard randomize the order of the pairs and leave any unpaired
 card and empty slots at the end. Add cards through the picker or Bulk Input
 (one card name per line), or fill empty slots with random playable cards.
+In the picker, use the arrow keys to navigate suggestions, Enter to select one,
+and Enter again (or Add card) to add it.
 Bulk Input retains unrecognized, duplicate, or overflow entries for correction.
 Drag card images to swap positions (or use the
 move buttons). The displayed percentages are the current EDHRec values that
