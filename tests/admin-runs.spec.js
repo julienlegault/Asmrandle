@@ -14,11 +14,20 @@ function renderDashboard(query = '') {
             'name' => 'an-extraordinarily-long-card-name-without-spaces',
             'img' => 'https://example.test/card.jpg', 'popularity' => 50,
         ]);
+        Illuminate\\Support\\Facades\\DB::table('cards')->insert([
+            'scryfall_id' => 'test-card', 'slug' => 'an-extraordinarily-long-card-name-without-spaces',
+            'name' => 'an-extraordinarily-long-card-name-without-spaces', 'image_url' => 'https://example.test/current.jpg',
+            'art_url' => 'https://example.test/current-art.jpg', 'inclusion' => 1,
+            'potential_decks' => 100, 'legal' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $cards[0]['printing'] = ['img' => 'https://example.test/printing.jpg'];
+        $cards[2]['img'] = null;
         foreach (range(-6, 5) as $offset) {
             Illuminate\\Support\\Facades\\DB::table('daily_challenges')->insert([
                 'date' => $gameDate->copy()->addDays($offset)->toDateString(),
                 'cards' => json_encode($cards), 'seeded' => true,
-                'perfect_score_emojis' => json_encode(str_repeat('😀', 10)),
+                'perfect_score_emojis' => $offset % 2 ? json_encode(str_repeat('😀', 10)) : null,
+                'welcome_text' => $offset % 2 ? 'Welcome <friends>!' : null,
                 'created_at' => now(), 'updated_at' => now(),
             ]);
         }
@@ -88,8 +97,8 @@ test('changing dates updates daily results without losing editor state and suppo
         'Completed games, all time', 'Scores Shared', 'Speedy Runs', 'Fastest Run', 'Average Run Duration', 'Days with no perfect 10s',
         'Daily plays per day', 'All-time average score',
     ]);
-    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Fastest Run' }).locator('strong')).toHaveText('42.000 s');
-    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Average Run Duration' }).locator('strong')).toHaveText('53.500 s');
+    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Fastest Run' }).locator('strong')).toHaveText('42.0 s');
+    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Average Run Duration' }).locator('strong')).toHaveText('53.5 s');
     await expect(daily.locator('.chart > .bar-group')).toHaveCount(11);
     await expect(daily.locator('.chart > .bar-group > .bars > .bar.regular')).toHaveCount(11);
     await expect(daily.locator('.chart > .bar-group > .bars > .bar.hard')).toHaveCount(11);
@@ -103,8 +112,8 @@ test('changing dates updates daily results without losing editor state and suppo
     await page.evaluate(() => { window.dashboardMarker = true; });
     await page.locator('#date-selector').fill(yesterday);
     await expect(cards.locator('.stat-label')).toHaveText(labels);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.000 s', '42.000 s']);
-    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Average Run Duration' }).locator('strong')).toHaveText('53.500 s');
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.0 s', '42.0 s']);
+    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Average Run Duration' }).locator('strong')).toHaveText('53.5 s');
     await expect(page.locator('#current-date')).toHaveText(yesterday);
     await expect(page.locator('#seeded-card-input')).toHaveValue('unfinished selection');
     await expect(editor).toBeVisible();
@@ -114,13 +123,13 @@ test('changing dates updates daily results without losing editor state and suppo
 
     await page.locator('#date-selector').fill(older);
     await expect(cards.locator('.stat-label')).toHaveText(labels);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.000 s', '65.000 s']);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.0 s', '65.0 s']);
     await page.goBack();
     await expect(page.locator('#date-selector')).toHaveValue(yesterday);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.000 s', '42.000 s']);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.0 s', '42.0 s']);
     await page.goForward();
     await expect(page.locator('#date-selector')).toHaveValue(older);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.000 s', '65.000 s']);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.0 s', '65.0 s']);
 
     fail = true;
     await page.locator('#date-selector').fill(today);
@@ -165,7 +174,7 @@ test('seeded runs fit on mobile, including expanded matchups', async ({ page }) 
             display: getComputedStyle(cell).display,
             label: getComputedStyle(cell, '::before').content,
         })))).toEqual(Array(6).fill({ display: 'block', label: 'none' }));
-        await expect(row.locator('.run-emojis')).toHaveText('😀'.repeat(10));
+        await expect(row.locator('.run-emojis')).toBeHidden();
         await expect(row.locator('.run-logo')).toBeVisible();
         await expect(row.locator('a[title="Copy"]')).toBeVisible();
     }
@@ -174,12 +183,24 @@ test('seeded runs fit on mobile, including expanded matchups', async ({ page }) 
     await locked.getByRole('button', { name: 'View all matchups' }).click();
     await expect(locked.getByRole('button', { name: 'View all matchups' })).toHaveAttribute('aria-expanded', 'true');
     await expect(locked.locator('.run-matchups-list')).toBeVisible();
+    await expect(locked.locator('.run-emojis')).toHaveText('😀'.repeat(10));
+    await expect(locked.locator('.run-emojis')).toBeVisible();
+    const previews = locked.locator('.run-matchups-list .preview');
+    await expect(previews.nth(0)).toHaveAttribute('src', 'https://example.test/printing.jpg');
+    await expect(previews.nth(1)).toHaveAttribute('src', 'https://example.test/card.jpg');
+    await expect(previews.nth(2)).toHaveAttribute('src', 'https://example.test/current.jpg');
+    await locked.locator('.run-name').first().hover();
+    await expect(previews.first()).toBeVisible();
+    await expect(scheduled.locator('.run-welcome')).toHaveText('Welcome <friends>!');
+    await expect(rows.nth(1).locator('.run-welcome')).toHaveText('—');
+    await rows.nth(1).getByRole('button', { name: 'View all matchups' }).click();
+    await expect(rows.nth(1).locator('.run-emojis')).toHaveText('—');
     await page.addStyleTag({ content: '#date-selector { min-width: 180px; }' });
 
     await page.setViewportSize({ width: 1200, height: 800 });
     await expect(page.locator('.manage-runs-table thead')).toBeVisible();
     await expect(page.locator('.manage-runs-table th')).toHaveText([
-        /Date/, 'Matchups', 'Perfect score', 'Site logo', 'Status', 'Actions',
+        /Date/, 'Matchups', 'Welcome text', 'Site logo', 'Status', 'Actions',
     ]);
 });
 

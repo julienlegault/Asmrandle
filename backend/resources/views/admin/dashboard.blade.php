@@ -169,11 +169,11 @@
             </div>
             <div class="stat">
                 <div class="stat-label">Fastest Run</div>
-                <strong class="duration-value">{{ $allTimeDurations['fastest'] === null ? '—' : number_format($allTimeDurations['fastest'] / 1000, 3).' s' }}</strong>
+                <strong class="duration-value">{{ $allTimeDurations['fastest'] === null ? '—' : number_format($allTimeDurations['fastest'] / 1000, 1).' s' }}</strong>
             </div>
             <div class="stat">
                 <div class="stat-label">Average Run Duration</div>
-                <strong class="duration-value">{{ $allTimeDurations['average'] === null ? '—' : number_format($allTimeDurations['average'] / 1000, 3).' s' }}</strong>
+                <strong class="duration-value">{{ $allTimeDurations['average'] === null ? '—' : number_format($allTimeDurations['average'] / 1000, 1).' s' }}</strong>
             </div>
             <div class="stat">
                 <div class="stat-label">Days with no perfect 10s</div>
@@ -209,8 +209,8 @@
                 <div class="stat"><div class="stat-label">First 10 copied</div><strong>{{ $firstTenCopied ? '✓' : '—' }}</strong></div>
                 <div class="stat"><div class="stat-label">Scores Shared</div><strong>{{ number_format($scoresShared) }}</strong></div>
                 <div class="stat"><div class="stat-label">Speedy Runs</div><strong>{{ number_format($dailyDurations['speedy']) }}</strong></div>
-                <div class="stat"><div class="stat-label">Fastest Run</div><strong class="duration-value">{{ $dailyDurations['fastest'] === null ? '—' : number_format($dailyDurations['fastest'] / 1000, 3).' s' }}</strong></div>
-                <div class="stat"><div class="stat-label">Average Run Duration</div><strong class="duration-value">{{ $dailyDurations['average'] === null ? '—' : number_format($dailyDurations['average'] / 1000, 3).' s' }}</strong></div>
+                <div class="stat"><div class="stat-label">Fastest Run</div><strong class="duration-value">{{ $dailyDurations['fastest'] === null ? '—' : number_format($dailyDurations['fastest'] / 1000, 1).' s' }}</strong></div>
+                <div class="stat"><div class="stat-label">Average Run Duration</div><strong class="duration-value">{{ $dailyDurations['average'] === null ? '—' : number_format($dailyDurations['average'] / 1000, 1).' s' }}</strong></div>
             </div>
             <div class="daily-legend">
                 <div><span class="legend"><span class="regular"></span> Regular</span></div>
@@ -368,7 +368,7 @@
                             <a id="sort-date" href="{{ $sortRunsUrl }}">Date {{ $runsOrder === 'asc' ? '↑' : '↓' }}</a>
                         </th>
                         <th>Matchups</th>
-                        <th>Perfect score</th>
+                        <th>Welcome text</th>
                         <th>Site logo</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -387,6 +387,7 @@
                                 <div>
                                 <button type="button" class="run-matchups-toggle" data-toggle="{{ $run->date }}" aria-expanded="false" aria-controls="matchups-{{ $run->date }}">View all matchups</button>
                                 <div class="run-matchups-list" id="matchups-{{ $run->date }}" data-matchups="{{ $run->date }}">
+                                    <div>Perfect score: <span class="run-emojis">{{ $runEmojis ?? '—' }}</span></div>
                                     @php
                                         for ($i = 0; $i < 10; $i++) {
                                             $card1Index = $i * 2;
@@ -397,8 +398,8 @@
                                             $card2Data = $allCardsMap->get($card2Slug);
                                             $card1Name = $card1Data?->name ?? $card1Slug;
                                             $card2Name = $card2Data?->name ?? $card2Slug;
-                                            $card1Image = $card1Data?->image_url;
-                                            $card2Image = $card2Data?->image_url;
+                                            $card1Image = $runCards[$card1Index]['printing']['img'] ?? $runCards[$card1Index]['img'] ?? $card1Data?->image_url;
+                                            $card2Image = $runCards[$card2Index]['printing']['img'] ?? $runCards[$card2Index]['img'] ?? $card2Data?->image_url;
                                     @endphp
                                         <div class="matchup">
                                             <strong>R{{ $i + 1 }}:</strong>
@@ -421,7 +422,7 @@
                                 </div>
                             </td>
                             <td>
-                                <span class="run-emojis">{{ $runEmojis ?? '—' }}</span>
+                                <span class="run-welcome">{{ $run->welcome_text ?? '—' }}</span>
                             </td>
                             <td>
                                 <span class="run-logo">{{ $logos[$run->logo ?? 'standard'] }}</span>
