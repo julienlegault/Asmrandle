@@ -29,7 +29,7 @@ class CodespaceSeederTest extends TestCase
         $records = DB::table('game_results')
             ->where('date', $weekAgoGameDate)
             ->orderBy('created_at')
-            ->get(['created_at']);
+            ->get(['started_at', 'created_at', 'duration_ms']);
 
         // Verify records exist
         $this->assertGreaterThan(0, $records->count());
@@ -46,7 +46,26 @@ class CodespaceSeederTest extends TestCase
                 "Timestamp {$timestampStr} should be >= {$dayStartStr}");
             $this->assertLessThan($dayEndStr, $timestampStr,
                 "Timestamp {$timestampStr} should be < {$dayEndStr}");
+            $this->assertNotNull($record->started_at);
+            $this->assertGreaterThanOrEqual($dayStartStr, $record->started_at);
+            $this->assertLessThan($record->created_at, $record->started_at);
+            $this->assertGreaterThan(0, $record->duration_ms);
+            $this->assertSame(
+                (int) $record->duration_ms,
+                (int) Carbon::parse($record->started_at, 'UTC')->diffInMilliseconds(Carbon::parse($record->created_at, 'UTC')),
+            );
         }
+        $this->assertGreaterThan(0, $records->where('duration_ms', '<', 60000)->count());
+        $this->assertGreaterThan(0, $records->where('duration_ms', '>=', 60000)->count());
+
+        $admin = DB::table('admin_accounts')->where('username', 'admin')->first();
+        $this->withSession(['admin' => ['id' => $admin->id, 'password_hash' => $admin->password]])
+            ->get('/admin?date='.$weekAgoGameDate)->assertOk()
+            ->assertViewHas('dailyDurations', [
+                'speedy' => $records->where('duration_ms', '<', 60000)->count(),
+                'fastest' => (int) $records->min('duration_ms'),
+                'average' => $records->avg('duration_ms'),
+            ]);
     }
 
     public function test_seeded_data_excludes_current_24_hours(): void

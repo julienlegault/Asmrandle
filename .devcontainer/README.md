@@ -21,8 +21,13 @@ README.
 Seeding is offline: [DevelopmentSeeder](../backend/database/seeders/DevelopmentSeeder.php)
 creates every card from `backend/data/formatted_card_list.js` with deterministic
 fake EDHRec popularity. Card images load lazily in the browser from Scryfall.
-Nothing is reseeded when data already exists. To start over:
-`php backend/artisan migrate:fresh --force && php backend/artisan cards:initialize-development`.
+In Codespaces, [CodespaceSeeder](../backend/database/seeders/CodespaceSeeder.php)
+also creates historical daily results with start times and varied durations,
+including runs under one minute, for testing admin statistics. It leaves existing
+game results unchanged, so previously seeded results are not backfilled.
+
+To erase all local data and start over:
+`php backend/artisan migrate:fresh --force && php backend/artisan cards:initialize-development && php backend/artisan db:seed --class=CodespaceSeeder --force`.
 
 To test the admin printing picker with real Scryfall IDs, run:
 

@@ -26,26 +26,26 @@ test('organizes, saves, edits and copies seeded cards', async ({ page }) => {
         for (let i = 0; i < 51; i++) playableCards.push({ ...playableCards[0], name: `Suggestion ${i}` });
     });
     await input.fill('suggestion');
-    await expect(page.locator('#playable-cards option')).toHaveCount(50);
+    await expect(page.locator('#playable-cards [role="option"]')).toHaveCount(50);
     await input.fill('suggestion 50');
-    await expect(page.locator('#playable-cards option')).toHaveAttribute('value', 'Suggestion 50');
+    await expect(page.locator('#playable-cards [role="option"]')).toHaveText('Suggestion 50');
     await page.evaluate(() => playableCards.splice(-51));
     await input.fill('Test card 20');
-    await expect(page.locator('#playable-cards option')).toHaveAttribute('value', 'Test card 20');
+    await expect(page.locator('#playable-cards [role="option"]')).toHaveText('Test card 20');
     for (let i = 0; i < 20; i++) {
         await input.fill(`Test card ${i + 20}`);
         await input.press('Enter');
     }
-    await expect(page.locator('#playable-cards option')).toHaveCount(0);
+    await expect(page.locator('#playable-cards [role="option"]')).toHaveCount(0);
     await expect(message).toHaveText('20 of 20 cards selected.');
     await expect(slots.nth(0).locator('img')).toHaveAttribute('alt', 'Test card 20');
     await expect.poll(() => slots.nth(0).locator('img').evaluate(image => image.naturalWidth)).toBe(100);
     await expect(slots.nth(0).locator('.popularity')).toHaveText('21.0000%');
     await input.fill('Test card 20');
-    await page.getByRole('button', { name: 'Add card' }).click();
+    await input.press('Enter');
     await expect(message).toHaveText('That card is already selected.');
     await input.fill('Test card 40');
-    await page.getByRole('button', { name: 'Add card' }).click();
+    await input.press('Enter');
     await expect(message).toHaveText('All 20 slots are filled. Remove a card first.');
 
     await slots.nth(0).scrollIntoViewIfNeeded();

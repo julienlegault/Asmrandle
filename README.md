@@ -85,8 +85,15 @@ for perfect-score shares. The welcome message appears over the landing-page
 logo for that game day. The selected logo
 applies to the entire site for that game day, including practice mode. The dashboard lists saved seeded runs and supports
 editing, deleting, and copying them to a new date. Card statistics are
-snapshotted when saved. Add cards through the picker or fill empty slots with
-random playable cards, then drag their images to swap positions (or use the
+snapshotted when saved. Shuffle randomizes all slots, including empty ones; Easy pairs the
+lowest inclusion rates with the highest, while Hard pairs adjacent inclusion
+rates. Easy and Hard randomize the order of the pairs and leave any unpaired
+card and empty slots at the end. Add cards through the picker or Bulk Input
+(one card name per line), or fill empty slots with random playable cards.
+In the picker, use the arrow keys to navigate suggestions, Enter to select one,
+and Enter again (or Add card) to add it.
+Bulk Input retains unrecognized, duplicate, or overflow entries for correction.
+Drag card images to swap positions (or use the
 move buttons). The displayed percentages are the current EDHRec values that
 will be snapshotted. A run cannot be edited or deleted after it starts or its
 game date passes, so all players see the same challenge.

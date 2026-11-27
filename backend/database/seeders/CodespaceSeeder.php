@@ -111,9 +111,11 @@ class CodespaceSeeder extends Seeder
 
             $batch = [];
             for ($run = 0; $run < $runsPerDay; $run++) {
-                // Random timestamp within the game day (06:00 UTC to 05:59:59 UTC next day)
-                $randomSeconds = rand(0, $dayDuration - 1);
+                // Keep both the start and completion within the game day.
+                $durationSeconds = $run % 3 === 0 ? rand(30, 59) : rand(60, 300);
+                $randomSeconds = rand($durationSeconds, $dayDuration - 1);
                 $timestamp = $dayStart->copy()->addSeconds($randomSeconds);
+                $startedAt = $timestamp->copy()->subSeconds($durationSeconds);
 
                 // Random score 0-10
                 $score = rand(0, 10);
@@ -141,6 +143,8 @@ class CodespaceSeeder extends Seeder
                     'first_ten' => $firstTen,
                     'score_copied' => $scoreCopied,
                     'answers' => json_encode($answers, JSON_THROW_ON_ERROR),
+                    'started_at' => $startedAt,
+                    'duration_ms' => $durationSeconds * 1000,
                     'created_at' => $timestamp,
                     'updated_at' => $timestamp,
                 ];

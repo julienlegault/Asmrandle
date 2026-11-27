@@ -58,6 +58,10 @@
         .seeded-picker { display: flex; align-items: end; gap: .5rem; flex-wrap: wrap; }
         .seeded-picker label { flex: 1 1 15rem; }
         .seeded-picker input { width: 100%; }
+        .seeded-suggestions { width: min(100%, 32rem); max-height: 16rem; overflow-y: auto; margin: .25rem 0; padding: 0; list-style: none; background: #1a1d26; border: 1px solid #70758c; border-radius: .3rem; }
+        .seeded-suggestions[hidden] { display: none; }
+        .seeded-suggestions [role="option"] { padding: .5rem; cursor: pointer; overflow-wrap: anywhere; }
+        .seeded-suggestions [role="option"]:hover, .seeded-suggestions [aria-selected="true"] { background: #3a3f4f; }
         .seeded-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
         .seeded-slot { min-height: 135px; border: 1px dashed #70758c; border-radius: .3rem; padding: .25rem; }
         .seeded-slot.is-target { outline: 3px solid #8bb9ff; }
@@ -68,7 +72,9 @@
         .seeded-ghost { position: fixed; z-index: 20; pointer-events: none; opacity: .8; }
         .seeded-controls { display: flex; justify-content: center; gap: .2rem; margin-top: .3rem; }
         .seeded-controls button { padding: .2rem .35rem; font-size: .8rem; }
-        .printing-dialog { width: min(90vw, 60rem); max-height: 85vh; background: #232637; color: inherit; border: 1px solid #70758c; border-radius: .5rem; }
+        .printing-dialog, .bulk-dialog { width: min(90vw, 60rem); max-height: 85vh; background: #232637; color: inherit; border: 1px solid #70758c; border-radius: .5rem; }
+        .bulk-dialog textarea { display: block; width: 100%; min-height: 12rem; padding: .4rem; font: inherit; }
+        #seeded-bulk-errors:empty { display: none; }
         .printing-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: .5rem; margin-top: .5rem; }
         .printing-option { display: flex; flex-direction: column; gap: .25rem; padding: .25rem; font-size: .8rem; }
         .printing-option img { width: 100%; border-radius: .3rem; }
@@ -169,11 +175,11 @@
             </div>
             <div class="stat">
                 <div class="stat-label">Fastest Run</div>
-                <strong class="duration-value">{{ $allTimeDurations['fastest'] === null ? '—' : number_format($allTimeDurations['fastest'] / 1000, 3).' s' }}</strong>
+                <strong class="duration-value">{{ $allTimeDurations['fastest'] === null ? '—' : number_format($allTimeDurations['fastest'] / 1000, 1).' s' }}</strong>
             </div>
             <div class="stat">
                 <div class="stat-label">Average Run Duration</div>
-                <strong class="duration-value">{{ $allTimeDurations['average'] === null ? '—' : number_format($allTimeDurations['average'] / 1000, 3).' s' }}</strong>
+                <strong class="duration-value">{{ $allTimeDurations['average'] === null ? '—' : number_format($allTimeDurations['average'] / 1000, 1).' s' }}</strong>
             </div>
             <div class="stat">
                 <div class="stat-label">Days with no perfect 10s</div>
@@ -209,8 +215,8 @@
                 <div class="stat"><div class="stat-label">First 10 copied</div><strong>{{ $firstTenCopied ? '✓' : '—' }}</strong></div>
                 <div class="stat"><div class="stat-label">Scores Shared</div><strong>{{ number_format($scoresShared) }}</strong></div>
                 <div class="stat"><div class="stat-label">Speedy Runs</div><strong>{{ number_format($dailyDurations['speedy']) }}</strong></div>
-                <div class="stat"><div class="stat-label">Fastest Run</div><strong class="duration-value">{{ $dailyDurations['fastest'] === null ? '—' : number_format($dailyDurations['fastest'] / 1000, 3).' s' }}</strong></div>
-                <div class="stat"><div class="stat-label">Average Run Duration</div><strong class="duration-value">{{ $dailyDurations['average'] === null ? '—' : number_format($dailyDurations['average'] / 1000, 3).' s' }}</strong></div>
+                <div class="stat"><div class="stat-label">Fastest Run</div><strong class="duration-value">{{ $dailyDurations['fastest'] === null ? '—' : number_format($dailyDurations['fastest'] / 1000, 1).' s' }}</strong></div>
+                <div class="stat"><div class="stat-label">Average Run Duration</div><strong class="duration-value">{{ $dailyDurations['average'] === null ? '—' : number_format($dailyDurations['average'] / 1000, 1).' s' }}</strong></div>
             </div>
             <div class="daily-legend">
                 <div><span class="legend"><span class="regular"></span> Regular</span></div>
@@ -305,12 +311,17 @@
                 </div>
                 <div class="seeded-picker">
                     <label>Add a card
-                        <input id="seeded-card-input" type="text" list="playable-cards" autocomplete="off" placeholder="Search by card name">
+                        <input id="seeded-card-input" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="playable-cards" autocomplete="off" placeholder="Search by card name">
                     </label>
-                    <button type="button" id="seeded-add-card">Add card</button>
-                    <button type="button" id="seeded-fill-missing">Fill missing</button>
+                    <button type="button" id="seeded-bulk-open">Bulk Input</button>
                 </div>
-                <datalist id="playable-cards"></datalist>
+                <ul id="playable-cards" class="seeded-suggestions" role="listbox" aria-label="Card suggestions" hidden></ul>
+                <div class="actions">
+                    <button type="button" id="seeded-fill-missing">Fill missing</button>
+                    <button type="button" id="seeded-shuffle">Shuffle</button>
+                    <button type="button" id="seeded-easy">Easy</button>
+                    <button type="button" id="seeded-hard">Hard</button>
+                </div>
                 <p id="seeded-message" role="status" aria-live="polite"></p>
                 <noscript><p class="errors">JavaScript is required to select and organize cards.</p></noscript>
                 <div class="pairs" id="seeded-pairs">
@@ -333,6 +344,16 @@
                         </div>
                     @endforeach
                 </div>
+                <dialog id="seeded-bulk-dialog" class="bulk-dialog" aria-labelledby="seeded-bulk-title">
+                    <h3 id="seeded-bulk-title">Bulk Input</h3>
+                    <label for="seeded-bulk-input">Card names, one per line</label>
+                    <textarea id="seeded-bulk-input" aria-describedby="seeded-bulk-errors"></textarea>
+                    <ul id="seeded-bulk-errors" class="errors" role="alert"></ul>
+                    <div class="actions">
+                        <button type="button" id="seeded-bulk-save">Save</button>
+                        <button type="button" id="seeded-bulk-cancel">Cancel</button>
+                    </div>
+                </dialog>
                 <dialog id="printing-dialog" class="printing-dialog" aria-labelledby="printing-title">
                     <h3 id="printing-title"></h3>
                     <p id="printing-status" role="status" aria-live="polite"></p>
@@ -368,7 +389,7 @@
                             <a id="sort-date" href="{{ $sortRunsUrl }}">Date {{ $runsOrder === 'asc' ? '↑' : '↓' }}</a>
                         </th>
                         <th>Matchups</th>
-                        <th>Perfect score</th>
+                        <th>Welcome text</th>
                         <th>Site logo</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -387,6 +408,7 @@
                                 <div>
                                 <button type="button" class="run-matchups-toggle" data-toggle="{{ $run->date }}" aria-expanded="false" aria-controls="matchups-{{ $run->date }}">View all matchups</button>
                                 <div class="run-matchups-list" id="matchups-{{ $run->date }}" data-matchups="{{ $run->date }}">
+                                    <div>Perfect score: <span class="run-emojis">{{ $runEmojis ?? '—' }}</span></div>
                                     @php
                                         for ($i = 0; $i < 10; $i++) {
                                             $card1Index = $i * 2;
@@ -397,8 +419,8 @@
                                             $card2Data = $allCardsMap->get($card2Slug);
                                             $card1Name = $card1Data?->name ?? $card1Slug;
                                             $card2Name = $card2Data?->name ?? $card2Slug;
-                                            $card1Image = $card1Data?->image_url;
-                                            $card2Image = $card2Data?->image_url;
+                                            $card1Image = $runCards[$card1Index]['printing']['img'] ?? $runCards[$card1Index]['img'] ?? $card1Data?->image_url;
+                                            $card2Image = $runCards[$card2Index]['printing']['img'] ?? $runCards[$card2Index]['img'] ?? $card2Data?->image_url;
                                     @endphp
                                         <div class="matchup">
                                             <strong>R{{ $i + 1 }}:</strong>
@@ -421,7 +443,7 @@
                                 </div>
                             </td>
                             <td>
-                                <span class="run-emojis">{{ $runEmojis ?? '—' }}</span>
+                                <span class="run-welcome">{{ $run->welcome_text ?? '—' }}</span>
                             </td>
                             <td>
                                 <span class="run-logo">{{ $logos[$run->logo ?? 'standard'] }}</span>
@@ -574,6 +596,83 @@
         renderSeededCards();
     }
 
+    function shuffleCards(items) {
+        for (let i = items.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [items[i], items[j]] = [items[j], items[i]];
+        }
+    }
+
+    function organizeSeededCards(mode) {
+        const slots = seededValues.map((slug, index) => ({
+            slug,
+            printing: seededPrintings[index],
+            popularity: playableBySlug.get(slug)?.popularity ?? savedCards.get(slug)?.popularity,
+        }));
+        const selected = slots.filter(card => card.slug);
+        if (mode === 'shuffle' && selected.length === 0) {
+            seededMessage.textContent = 'Select at least one card to shuffle.';
+            return;
+        }
+        if (mode !== 'shuffle' && selected.length < 2) {
+            seededMessage.textContent = 'Select at least two cards to organize.';
+            return;
+        }
+        const cards = mode === 'shuffle' ? slots : selected;
+        if (mode === 'shuffle') {
+            shuffleCards(cards);
+        } else {
+            if (cards.some(card => !Number.isFinite(card.popularity))) {
+                seededMessage.textContent = 'Cannot organize cards without inclusion percentages.';
+                return;
+            }
+            cards.sort((a, b) => a.popularity - b.popularity);
+            if (mode === 'easy') {
+                const paired = [];
+                let low = 0;
+                let high = cards.length - 1;
+                while (low <= high) {
+                    paired.push(cards[low++]);
+                    if (low <= high) paired.push(cards[high--]);
+                }
+                cards.splice(0, cards.length, ...paired);
+            } else if (cards.length % 2) {
+                let bestIndex = 0;
+                let bestDifference = Infinity;
+                // In sorted order, an optimal unpaired card has an even index.
+                for (let index = 0; index < cards.length; index += 2) {
+                    const paired = cards.filter((_, i) => i !== index);
+                    let difference = 0;
+                    for (let i = 0; i < paired.length; i += 2) {
+                        difference += paired[i + 1].popularity - paired[i].popularity;
+                    }
+                    if (difference < bestDifference) {
+                        bestDifference = difference;
+                        bestIndex = index;
+                    }
+                }
+                cards.push(cards.splice(bestIndex, 1)[0]);
+            }
+            const unpaired = cards.length % 2 ? cards.pop() : null;
+            const pairs = [];
+            for (let i = 0; i < cards.length; i += 2) {
+                pairs.push([cards[i], cards[i + 1]]);
+            }
+            shuffleCards(pairs);
+            cards.splice(0, cards.length, ...pairs.flat());
+            if (unpaired) cards.push(unpaired);
+        }
+        seededSlots.forEach((slot, index) => {
+            seededValues[index] = cards[index]?.slug ?? '';
+            seededPrintings[index] = cards[index]?.printing ?? null;
+        });
+        renderSeededCards();
+    }
+
+    for (const mode of ['shuffle', 'easy', 'hard']) {
+        document.getElementById(`seeded-${mode}`).addEventListener('click', () => organizeSeededCards(mode));
+    }
+
     async function openPrintingPicker(index) {
         const slug = seededValues[index];
         printingIndex = index;
@@ -628,9 +727,48 @@
     document.getElementById('printing-close').addEventListener('click', () => printingDialog.close());
     printingDialog.addEventListener('close', () => { printingIndex = null; });
 
-    function addSeededCard() {
+    function findPlayableCards(name) {
+        const search = name.trim().toLowerCase();
+        return playableCards.filter(card => card.name.toLowerCase() === search);
+    }
+
+    let activeSuggestion = -1;
+
+    function closeSeededSuggestions() {
+        seededSuggestions.hidden = true;
+        seededInput.setAttribute('aria-expanded', 'false');
+        seededInput.removeAttribute('aria-activedescendant');
+        activeSuggestion = -1;
+    }
+
+    function updateSeededSuggestions() {
         const search = seededInput.value.trim().toLowerCase();
-        const matches = playableCards.filter(card => card.name.toLowerCase() === search);
+        const matches = search ? playableCards.filter(card => card.name.toLowerCase().includes(search)).slice(0, 50) : [];
+        const options = document.createDocumentFragment();
+        matches.forEach((card, index) => {
+            const option = document.createElement('li');
+            option.id = `card-suggestion-${index}`;
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', 'false');
+            option.tabIndex = -1;
+            option.textContent = card.name;
+            options.append(option);
+        });
+        seededSuggestions.replaceChildren(options);
+        closeSeededSuggestions();
+        if (matches.length) {
+            seededSuggestions.hidden = false;
+            seededInput.setAttribute('aria-expanded', 'true');
+        }
+    }
+
+    function selectSeededSuggestion(option) {
+        seededInput.value = option.textContent;
+        addSeededCard();
+    }
+
+    function addSeededCard() {
+        const matches = findPlayableCards(seededInput.value);
         if (matches.length !== 1) {
             seededMessage.textContent = 'Choose a playable card from the suggestions.';
         } else if (seededValues.includes(matches[0].slug)) {
@@ -643,21 +781,71 @@
             seededSuggestions.replaceChildren();
             renderSeededCards();
         }
+        closeSeededSuggestions();
         seededInput.focus();
     }
 
-    seededInput.addEventListener('input', () => {
-        const search = seededInput.value.trim().toLowerCase();
-        seededSuggestions.replaceChildren();
-        if (!search) return;
-        const matches = playableCards.filter(card => card.name.toLowerCase().includes(search)).slice(0, 50);
-        for (const card of matches) {
-            const option = document.createElement('option');
-            option.value = card.name;
-            seededSuggestions.append(option);
-        }
+    const bulkDialog = document.getElementById('seeded-bulk-dialog');
+    const bulkInput = document.getElementById('seeded-bulk-input');
+    const bulkErrors = document.getElementById('seeded-bulk-errors');
+    document.getElementById('seeded-bulk-open').addEventListener('click', () => {
+        bulkDialog.showModal();
+        bulkInput.focus();
     });
-    document.getElementById('seeded-add-card').addEventListener('click', addSeededCard);
+    document.getElementById('seeded-bulk-cancel').addEventListener('click', () => bulkDialog.close());
+    bulkInput.addEventListener('input', () => bulkErrors.replaceChildren());
+    document.getElementById('seeded-bulk-save').addEventListener('click', () => {
+        const remaining = [];
+        bulkErrors.replaceChildren();
+        for (const line of bulkInput.value.split(/\r?\n/)) {
+            const name = line.trim();
+            if (!name) continue;
+            const matches = findPlayableCards(name);
+            if (matches.length === 0) {
+                remaining.push(line);
+                continue;
+            }
+            let error;
+            if (matches.length > 1) {
+                error = 'matches multiple playable cards';
+            } else if (seededValues.includes(matches[0].slug)) {
+                error = 'already selected';
+            } else if (!seededValues.includes('')) {
+                error = 'no empty slots remain';
+            } else {
+                const index = seededValues.indexOf('');
+                seededValues[index] = matches[0].slug;
+                seededPrintings[index] = null;
+                continue;
+            }
+            remaining.push(line);
+            const item = document.createElement('li');
+            item.textContent = `${name}: ${error}.`;
+            bulkErrors.append(item);
+        }
+        bulkInput.value = remaining.join('\n');
+        renderSeededCards();
+        if (remaining.length) bulkInput.focus();
+        else bulkDialog.close();
+    });
+
+    seededInput.addEventListener('input', updateSeededSuggestions);
+    seededInput.addEventListener('focus', updateSeededSuggestions);
+    seededSuggestions.addEventListener('mousedown', event => event.preventDefault());
+    seededSuggestions.addEventListener('click', event => {
+        const option = event.target.closest('[role="option"]');
+        if (option) selectSeededSuggestion(option);
+    });
+    let suggestionPointerDown = false;
+    document.addEventListener('pointerdown', () => { suggestionPointerDown = true; });
+    document.addEventListener('pointerup', () => { suggestionPointerDown = false; });
+    document.addEventListener('pointercancel', () => { suggestionPointerDown = false; });
+    document.addEventListener('click', event => {
+        if (event.target !== seededInput && !seededSuggestions.contains(event.target)) closeSeededSuggestions();
+    });
+    document.addEventListener('focusin', event => {
+        if (!suggestionPointerDown && event.target !== seededInput && !seededSuggestions.contains(event.target)) closeSeededSuggestions();
+    });
     document.getElementById('seeded-fill-missing').addEventListener('click', () => {
         const missing = seededValues.filter(value => !value).length;
         if (!missing) {
@@ -679,9 +867,32 @@
         seededMessage.textContent = `Filled ${missing} missing ${missing === 1 ? 'slot' : 'slots'} with random cards.`;
     });
     seededInput.addEventListener('keydown', event => {
-        if (event.key === 'Enter') {
+        if (event.isComposing) return;
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            if (seededSuggestions.hidden) updateSeededSuggestions();
+            const options = seededSuggestions.children;
+            if (!options.length || seededSuggestions.hidden) return;
             event.preventDefault();
-            addSeededCard();
+            if (activeSuggestion >= 0) options[activeSuggestion].setAttribute('aria-selected', 'false');
+            activeSuggestion = event.key === 'ArrowDown'
+                ? (activeSuggestion + 1) % options.length
+                : (activeSuggestion < 0 ? options.length - 1 : (activeSuggestion - 1 + options.length) % options.length);
+            const option = options[activeSuggestion];
+            option.setAttribute('aria-selected', 'true');
+            seededInput.setAttribute('aria-activedescendant', option.id);
+            option.scrollIntoView({ block: 'nearest' });
+        } else if (event.key === 'Escape' && !seededSuggestions.hidden) {
+            event.preventDefault();
+            closeSeededSuggestions();
+        } else if (event.key === 'Tab') {
+            closeSeededSuggestions();
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            if (!seededSuggestions.hidden && activeSuggestion >= 0) {
+                selectSeededSuggestion(seededSuggestions.children[activeSuggestion]);
+            } else {
+                addSeededCard();
+            }
         }
     });
     document.querySelector('.seeded-form').addEventListener('submit', event => {

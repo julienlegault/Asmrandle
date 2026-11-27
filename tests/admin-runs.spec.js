@@ -14,11 +14,28 @@ function renderDashboard(query = '') {
             'name' => 'an-extraordinarily-long-card-name-without-spaces',
             'img' => 'https://example.test/card.jpg', 'popularity' => 50,
         ]);
+        Illuminate\\Support\\Facades\\DB::table('cards')->insert([
+            'scryfall_id' => 'test-card', 'slug' => 'an-extraordinarily-long-card-name-without-spaces',
+            'name' => 'an-extraordinarily-long-card-name-without-spaces', 'image_url' => 'https://example.test/current.jpg',
+            'art_url' => 'https://example.test/current-art.jpg', 'inclusion' => 1,
+            'potential_decks' => 100, 'legal' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        foreach ([1, 4, 5, 9, 10, 100] as $i => $inclusion) {
+            Illuminate\\Support\\Facades\\DB::table('cards')->insert([
+                'scryfall_id' => "sort-$i", 'slug' => "sort-$i", 'name' => "Sort card $i",
+                'image_url' => 'https://example.test/current.jpg', 'art_url' => 'https://example.test/art.jpg',
+                'inclusion' => $inclusion, 'potential_decks' => 100, 'legal' => true,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+        $cards[0]['printing'] = ['img' => 'https://example.test/printing.jpg'];
+        $cards[2]['img'] = null;
         foreach (range(-6, 5) as $offset) {
             Illuminate\\Support\\Facades\\DB::table('daily_challenges')->insert([
                 'date' => $gameDate->copy()->addDays($offset)->toDateString(),
                 'cards' => json_encode($cards), 'seeded' => true,
-                'perfect_score_emojis' => json_encode(str_repeat('😀', 10)),
+                'perfect_score_emojis' => $offset % 2 ? json_encode(str_repeat('😀', 10)) : null,
+                'welcome_text' => $offset % 2 ? 'Welcome <friends>!' : null,
                 'created_at' => now(), 'updated_at' => now(),
             ]);
         }
@@ -47,6 +64,247 @@ function renderDashboard(query = '') {
         encoding: 'utf8',
     });
 }
+
+test('card suggestions support keyboard and pointer selection without covering controls', async ({ page }) => {
+    const html = renderDashboard();
+    await page.route('http://admin.test/admin', route => route.fulfill({ contentType: 'text/html', body: html }));
+    await page.goto('http://admin.test/admin');
+    const editor = page.locator('#seeded-editor');
+    const input = editor.getByRole('combobox', { name: 'Add a card' });
+    const list = editor.getByRole('listbox', { name: 'Card suggestions' });
+    const options = list.getByRole('option');
+    await expect(editor.getByRole('button', { name: 'Add card', exact: true })).toHaveCount(0);
+    await input.fill('sort card');
+    await expect(input).toHaveAttribute('aria-expanded', 'true');
+    await expect(options).toHaveCount(6);
+    expect((await list.boundingBox()).y).toBeGreaterThanOrEqual((await input.boundingBox()).y + (await input.boundingBox()).height);
+    expect((await editor.getByRole('button', { name: 'Fill missing' }).boundingBox()).y)
+        .toBeGreaterThanOrEqual((await list.boundingBox()).y + (await list.boundingBox()).height);
+    await expect(list).toHaveCSS('background-color', 'rgb(26, 29, 38)');
+
+    await input.press('ArrowDown');
+    await expect(input).toHaveAttribute('aria-activedescendant', 'card-suggestion-0');
+    await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true');
+    await input.press('ArrowDown');
+    await expect(input).toHaveAttribute('aria-activedescendant', 'card-suggestion-1');
+    await expect(options.nth(0)).toHaveAttribute('aria-selected', 'false');
+    await input.press('Enter');
+    await expect(editor.locator('.seeded-slot').first().locator('input').first()).toHaveValue('sort-1');
+    await expect(input).toHaveValue('');
+    await expect(input).toHaveAttribute('aria-expanded', 'false');
+    await expect(input).not.toHaveAttribute('aria-activedescendant');
+
+    await input.fill('sort card');
+    await options.filter({ hasText: 'Sort card 3' }).click();
+    await expect(editor.locator('.seeded-slot').nth(1).locator('input').first()).toHaveValue('sort-3');
+    await expect(input).toHaveValue('');
+    await expect(input).toBeFocused();
+    await expect(list).toBeHidden();
+
+    await input.fill('sort card 3');
+    await options.filter({ hasText: 'Sort card 3' }).click();
+    await expect(editor.locator('#seeded-message')).toHaveText('That card is already selected.');
+    await expect(input).toHaveValue('Sort card 3');
+
+    await input.fill('sort');
+    await input.press('ArrowUp');
+    await expect(input).toHaveAttribute('aria-activedescendant', 'card-suggestion-5');
+    await input.press('Escape');
+    await expect(input).toHaveAttribute('aria-expanded', 'false');
+    await expect(input).not.toHaveAttribute('aria-activedescendant');
+    await input.press('ArrowDown');
+    await expect(list).toBeVisible();
+    await input.press('Tab');
+    await expect(list).toBeHidden();
+
+    await input.fill('sort');
+    await editor.getByRole('button', { name: 'Fill missing' }).click();
+    await expect(editor.locator('#seeded-message')).toHaveText('Not enough distinct playable cards are available to fill the missing slots.');
+    await expect(list).toBeHidden();
+    await input.fill('no matching cards');
+    await expect(input).toHaveAttribute('aria-expanded', 'false');
+    await expect(list).toBeHidden();
+    await input.press('Enter');
+    await expect(editor.locator('#seeded-message')).toHaveText('Choose a playable card from the suggestions.');
+    await page.evaluate(() => {
+        for (let i = 0; i < 51; i++) playableCards.push({ name: `Suggestion ${i}` });
+    });
+    await input.fill('suggestion');
+    await expect(options).toHaveCount(50);
+    await input.fill('');
+    await expect(list).toBeHidden();
+
+    await page.evaluate(() => {
+        for (let i = 0; i < 18; i++) {
+            const card = { slug: `extra-${i}`, name: `Extra ${i}`, image: 'https://example.test/card.jpg', popularity: 1 };
+            playableCards.push(card);
+            playableBySlug.set(card.slug, card);
+        }
+    });
+    await editor.getByRole('button', { name: 'Bulk Input' }).click();
+    await page.getByLabel('Card names, one per line').fill(Array.from({ length: 18 }, (_, i) => `Extra ${i}`).join('\n'));
+    await page.getByRole('dialog', { name: 'Bulk Input' }).getByRole('button', { name: 'Save' }).click();
+    await input.fill('Sort card 4');
+    await input.press('ArrowDown');
+    await input.press('Enter');
+    await expect(editor.locator('#seeded-message')).toHaveText('All 20 slots are filled. Remove a card first.');
+    await expect(input).toHaveValue('Sort card 4');
+    expect(await editor.locator('.seeded-slot input[name^="cards"]').evaluateAll(inputs => inputs.map(input => input.value)))
+        .toEqual(['sort-1', 'sort-3', ...Array.from({ length: 18 }, (_, i) => `extra-${i}`)]);
+});
+
+test.describe('touch card suggestions', () => {
+    test.use({ hasTouch: true });
+
+    test('selects a suggestion by touch', async ({ page }) => {
+        const html = renderDashboard();
+        await page.route('http://admin.test/admin', route => route.fulfill({ contentType: 'text/html', body: html }));
+        await page.setViewportSize({ width: 320, height: 800 });
+        await page.goto('http://admin.test/admin');
+        const input = page.getByRole('combobox', { name: 'Add a card' });
+        await input.fill('sort card');
+        const list = page.getByRole('listbox', { name: 'Card suggestions' });
+        expect((await list.boundingBox()).y).toBeGreaterThanOrEqual((await input.boundingBox()).y + (await input.boundingBox()).height);
+        expect((await list.boundingBox()).width).toBeLessThanOrEqual(320);
+        await page.getByRole('option', { name: 'Sort card 2' }).tap();
+        await expect(page.locator('.seeded-slot').first().locator('input').first()).toHaveValue('sort-2');
+        await expect(input).toHaveValue('');
+        await expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+});
+
+test('bulk input adds valid cards and retains only errors for correction', async ({ page }) => {
+    const html = renderDashboard();
+    await page.route('http://admin.test/admin', route => route.fulfill({ contentType: 'text/html', body: html }));
+    await page.goto('http://admin.test/admin');
+    const editor = page.locator('#seeded-editor');
+    const slots = editor.locator('.seeded-slot');
+    const values = () => slots.locator('input[name^="cards"]').evaluateAll(inputs => inputs.map(input => input.value));
+    const dialog = page.getByRole('dialog', { name: 'Bulk Input' });
+    const input = dialog.getByLabel('Card names, one per line');
+    const errors = dialog.locator('#seeded-bulk-errors');
+    await expect(editor.locator('.seeded-picker')).toContainText('Bulk Input');
+    await expect(editor.locator('.seeded-picker')).not.toContainText('Fill missing');
+    await expect(editor.locator('.actions').first()).toContainText('Fill missing');
+    await expect(editor.locator('.actions').first()).toContainText('Shuffle');
+
+    await editor.getByLabel('Add a card').fill('Sort card 0');
+    await editor.getByLabel('Add a card').press('Enter');
+    await editor.getByRole('button', { name: 'Bulk Input' }).click();
+    await expect(input).toBeFocused();
+    await input.fill(' sort CARD 1 \nMissing card\n\nSort card 2\nSort card 0\nSort card 1');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(input).toHaveValue('Missing card\nSort card 0\nSort card 1');
+    await expect(errors.locator('li')).toHaveText([
+        'Sort card 0: already selected.',
+        'Sort card 1: already selected.',
+    ]);
+    expect((await values()).slice(0, 3)).toEqual(['sort-0', 'sort-1', 'sort-2']);
+
+    await input.fill('Missing card');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(input).toHaveValue('Missing card');
+    await expect(errors.locator('li')).toHaveCount(0);
+
+    await input.fill('Sort card 3\nSort card 4');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toBeHidden();
+    expect((await values()).slice(0, 5)).toEqual(['sort-0', 'sort-1', 'sort-2', 'sort-3', 'sort-4']);
+
+    await page.evaluate(() => {
+        for (let i = 0; i < 16; i++) {
+            const card = { slug: `extra-${i}`, name: `Extra ${i}`, image: 'https://example.test/card.jpg', popularity: 1 };
+            playableCards.push(card);
+            playableBySlug.set(card.slug, card);
+        }
+    });
+    await editor.getByRole('button', { name: 'Bulk Input' }).click();
+    await expect(input).toHaveValue('');
+    await input.fill([...Array.from({ length: 16 }, (_, i) => `Extra ${i}`), 'Missing card'].join('\n'));
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(input).toHaveValue('Extra 15\nMissing card');
+    await expect(errors.locator('li')).toHaveText([
+        'Extra 15: no empty slots remain.',
+    ]);
+    expect((await values()).filter(Boolean)).toHaveLength(20);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await editor.getByRole('button', { name: 'Bulk Input' }).click();
+    await expect(input).toHaveValue('Extra 15\nMissing card');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+});
+
+test('organizes selected cards and keeps their printings', async ({ page }) => {
+    const html = renderDashboard();
+    await page.route('http://admin.test/admin', route => route.fulfill({ contentType: 'text/html', body: html }));
+    await page.route('http://admin.test/admin/cards/sort-1/printings', route => route.fulfill({
+        json: { printings: [{
+            scryfall_id: '11111111-2222-4333-8444-555555555555',
+            img: 'https://cards.scryfall.io/normal/test.jpg',
+            artImg: 'https://cards.scryfall.io/art_crop/test.jpg',
+            set_name: 'Test set', collector_number: '1',
+        }] },
+    }));
+    await page.goto('http://admin.test/admin');
+    const editor = page.locator('#seeded-editor');
+    const slots = editor.locator('.seeded-slot');
+    const values = () => slots.locator('input[name^="cards"]').evaluateAll(inputs => inputs.map(input => input.value));
+    const message = editor.locator('#seeded-message');
+    await editor.getByRole('button', { name: 'Easy', exact: true }).click();
+    await expect(message).toHaveText('Select at least two cards to organize.');
+    await editor.getByRole('button', { name: 'Shuffle', exact: true }).click();
+    await expect(message).toHaveText('Select at least one card to shuffle.');
+    await page.evaluate(() => { Math.random = () => 0; });
+
+    for (const i of [3, 0, 5, 1, 4, 2]) {
+        await editor.getByLabel('Add a card').fill(`Sort card ${i}`);
+        await editor.getByLabel('Add a card').press('Enter');
+        if (i === 3) {
+            await editor.getByRole('button', { name: 'Shuffle', exact: true }).click();
+            expect(await values()).toEqual([...Array(19).fill(''), 'sort-3']);
+        }
+    }
+    await editor.getByRole('button', { name: 'Choose printing for Sort card 1' }).click();
+    await page.getByRole('button', { name: 'Test set #1' }).click();
+    const assertPrinting = async index => {
+        await expect(slots.nth(index).locator('[name$="[scryfall_id]"]')).toHaveValue('11111111-2222-4333-8444-555555555555');
+        await expect(slots.nth(index).locator('img')).toHaveAttribute('src', 'https://cards.scryfall.io/normal/test.jpg');
+    };
+
+    await editor.getByRole('button', { name: 'Easy', exact: true }).click();
+    expect((await values()).slice(0, 6)).toEqual(['sort-1', 'sort-4', 'sort-2', 'sort-3', 'sort-0', 'sort-5']);
+    await assertPrinting(0);
+    await editor.getByRole('button', { name: 'Hard', exact: true }).click();
+    expect((await values()).slice(0, 6)).toEqual(['sort-2', 'sort-3', 'sort-4', 'sort-5', 'sort-0', 'sort-1']);
+    await assertPrinting(5);
+
+    await editor.getByRole('button', { name: 'Remove Sort card 5' }).click();
+    await editor.getByRole('button', { name: 'Hard', exact: true }).click();
+    expect((await values()).slice(0, 5)).toEqual(['sort-3', 'sort-4', 'sort-1', 'sort-2', 'sort-0']);
+    await assertPrinting(2);
+    await editor.getByLabel('Add a card').fill('Sort card 5');
+    await editor.getByLabel('Add a card').press('Enter');
+    await editor.getByRole('button', { name: 'Remove Sort card 2' }).click();
+    await editor.getByRole('button', { name: 'Easy', exact: true }).click();
+    expect(await values()).toEqual(['sort-1', 'sort-4', 'sort-0', 'sort-5', 'sort-3', ...Array(15).fill('')]);
+    await assertPrinting(0);
+    await editor.getByRole('button', { name: 'Shuffle', exact: true }).click();
+    expect(await values()).toEqual(['sort-4', 'sort-0', 'sort-5', 'sort-3', ...Array(15).fill(''), 'sort-1']);
+    await assertPrinting(19);
+
+    await page.evaluate(() => { playableBySlug.delete('sort-1'); });
+    const before = await values();
+    await editor.getByRole('button', { name: 'Hard', exact: true }).click();
+    await expect(message).toHaveText('Cannot organize cards without inclusion percentages.');
+    expect(await values()).toEqual(before);
+    await assertPrinting(19);
+    await page.evaluate(() => { savedCards.set('sort-1', { popularity: 4 }); });
+    await editor.getByRole('button', { name: 'Hard', exact: true }).click();
+    expect((await values()).slice(0, 5)).toEqual(['sort-3', 'sort-4', 'sort-0', 'sort-1', 'sort-5']);
+    await assertPrinting(3);
+});
 
 test('changing dates updates daily results without losing editor state and supports history', async ({ page }) => {
     const todayPage = renderDashboard();
@@ -88,8 +346,8 @@ test('changing dates updates daily results without losing editor state and suppo
         'Completed games, all time', 'Scores Shared', 'Speedy Runs', 'Fastest Run', 'Average Run Duration', 'Days with no perfect 10s',
         'Daily plays per day', 'All-time average score',
     ]);
-    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Fastest Run' }).locator('strong')).toHaveText('42.000 s');
-    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Average Run Duration' }).locator('strong')).toHaveText('53.500 s');
+    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Fastest Run' }).locator('strong')).toHaveText('42.0 s');
+    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Average Run Duration' }).locator('strong')).toHaveText('53.5 s');
     await expect(daily.locator('.chart > .bar-group')).toHaveCount(11);
     await expect(daily.locator('.chart > .bar-group > .bars > .bar.regular')).toHaveCount(11);
     await expect(daily.locator('.chart > .bar-group > .bars > .bar.hard')).toHaveCount(11);
@@ -103,8 +361,8 @@ test('changing dates updates daily results without losing editor state and suppo
     await page.evaluate(() => { window.dashboardMarker = true; });
     await page.locator('#date-selector').fill(yesterday);
     await expect(cards.locator('.stat-label')).toHaveText(labels);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.000 s', '42.000 s']);
-    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Average Run Duration' }).locator('strong')).toHaveText('53.500 s');
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.0 s', '42.0 s']);
+    await expect(page.locator('.all-time-stats .stat').filter({ hasText: 'Average Run Duration' }).locator('strong')).toHaveText('53.5 s');
     await expect(page.locator('#current-date')).toHaveText(yesterday);
     await expect(page.locator('#seeded-card-input')).toHaveValue('unfinished selection');
     await expect(editor).toBeVisible();
@@ -114,13 +372,13 @@ test('changing dates updates daily results without losing editor state and suppo
 
     await page.locator('#date-selector').fill(older);
     await expect(cards.locator('.stat-label')).toHaveText(labels);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.000 s', '65.000 s']);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.0 s', '65.0 s']);
     await page.goBack();
     await expect(page.locator('#date-selector')).toHaveValue(yesterday);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.000 s', '42.000 s']);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '✓', '1', '1', '42.0 s', '42.0 s']);
     await page.goForward();
     await expect(page.locator('#date-selector')).toHaveValue(older);
-    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.000 s', '65.000 s']);
+    await expect(cards.locator('strong')).toHaveText(['1', '0', '—', '1', '0', '65.0 s', '65.0 s']);
 
     fail = true;
     await page.locator('#date-selector').fill(today);
@@ -165,7 +423,7 @@ test('seeded runs fit on mobile, including expanded matchups', async ({ page }) 
             display: getComputedStyle(cell).display,
             label: getComputedStyle(cell, '::before').content,
         })))).toEqual(Array(6).fill({ display: 'block', label: 'none' }));
-        await expect(row.locator('.run-emojis')).toHaveText('😀'.repeat(10));
+        await expect(row.locator('.run-emojis')).toBeHidden();
         await expect(row.locator('.run-logo')).toBeVisible();
         await expect(row.locator('a[title="Copy"]')).toBeVisible();
     }
@@ -174,12 +432,24 @@ test('seeded runs fit on mobile, including expanded matchups', async ({ page }) 
     await locked.getByRole('button', { name: 'View all matchups' }).click();
     await expect(locked.getByRole('button', { name: 'View all matchups' })).toHaveAttribute('aria-expanded', 'true');
     await expect(locked.locator('.run-matchups-list')).toBeVisible();
+    await expect(locked.locator('.run-emojis')).toHaveText('😀'.repeat(10));
+    await expect(locked.locator('.run-emojis')).toBeVisible();
+    const previews = locked.locator('.run-matchups-list .preview');
+    await expect(previews.nth(0)).toHaveAttribute('src', 'https://example.test/printing.jpg');
+    await expect(previews.nth(1)).toHaveAttribute('src', 'https://example.test/card.jpg');
+    await expect(previews.nth(2)).toHaveAttribute('src', 'https://example.test/current.jpg');
+    await locked.locator('.run-name').first().hover();
+    await expect(previews.first()).toBeVisible();
+    await expect(scheduled.locator('.run-welcome')).toHaveText('Welcome <friends>!');
+    await expect(rows.nth(1).locator('.run-welcome')).toHaveText('—');
+    await rows.nth(1).getByRole('button', { name: 'View all matchups' }).click();
+    await expect(rows.nth(1).locator('.run-emojis')).toHaveText('—');
     await page.addStyleTag({ content: '#date-selector { min-width: 180px; }' });
 
     await page.setViewportSize({ width: 1200, height: 800 });
     await expect(page.locator('.manage-runs-table thead')).toBeVisible();
     await expect(page.locator('.manage-runs-table th')).toHaveText([
-        /Date/, 'Matchups', 'Perfect score', 'Site logo', 'Status', 'Actions',
+        /Date/, 'Matchups', 'Welcome text', 'Site logo', 'Status', 'Actions',
     ]);
 });
 
