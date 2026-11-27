@@ -68,7 +68,9 @@
         .seeded-ghost { position: fixed; z-index: 20; pointer-events: none; opacity: .8; }
         .seeded-controls { display: flex; justify-content: center; gap: .2rem; margin-top: .3rem; }
         .seeded-controls button { padding: .2rem .35rem; font-size: .8rem; }
-        .printing-dialog { width: min(90vw, 60rem); max-height: 85vh; background: #232637; color: inherit; border: 1px solid #70758c; border-radius: .5rem; }
+        .printing-dialog, .bulk-dialog { width: min(90vw, 60rem); max-height: 85vh; background: #232637; color: inherit; border: 1px solid #70758c; border-radius: .5rem; }
+        .bulk-dialog textarea { display: block; width: 100%; min-height: 12rem; padding: .4rem; font: inherit; }
+        #seeded-bulk-errors:empty { display: none; }
         .printing-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: .5rem; margin-top: .5rem; }
         .printing-option { display: flex; flex-direction: column; gap: .25rem; padding: .25rem; font-size: .8rem; }
         .printing-option img { width: 100%; border-radius: .3rem; }
@@ -308,16 +310,17 @@
                         <input id="seeded-card-input" type="text" list="playable-cards" autocomplete="off" placeholder="Search by card name">
                     </label>
                     <button type="button" id="seeded-add-card">Add card</button>
-                    <button type="button" id="seeded-fill-missing">Fill missing</button>
+                    <button type="button" id="seeded-bulk-open">Bulk Input</button>
                 </div>
                 <datalist id="playable-cards"></datalist>
-                <p id="seeded-message" role="status" aria-live="polite"></p>
-                <noscript><p class="errors">JavaScript is required to select and organize cards.</p></noscript>
                 <div class="actions">
+                    <button type="button" id="seeded-fill-missing">Fill missing</button>
                     <button type="button" id="seeded-shuffle">Shuffle</button>
                     <button type="button" id="seeded-easy">Easy</button>
                     <button type="button" id="seeded-hard">Hard</button>
                 </div>
+                <p id="seeded-message" role="status" aria-live="polite"></p>
+                <noscript><p class="errors">JavaScript is required to select and organize cards.</p></noscript>
                 <div class="pairs" id="seeded-pairs">
                     @foreach (range(0, 9) as $round)
                         <div class="pair">
@@ -338,6 +341,16 @@
                         </div>
                     @endforeach
                 </div>
+                <dialog id="seeded-bulk-dialog" class="bulk-dialog" aria-labelledby="seeded-bulk-title">
+                    <h3 id="seeded-bulk-title">Bulk Input</h3>
+                    <label for="seeded-bulk-input">Card names, one per line</label>
+                    <textarea id="seeded-bulk-input" aria-describedby="seeded-bulk-errors"></textarea>
+                    <ul id="seeded-bulk-errors" class="errors" role="alert"></ul>
+                    <div class="actions">
+                        <button type="button" id="seeded-bulk-save">Save</button>
+                        <button type="button" id="seeded-bulk-cancel">Cancel</button>
+                    </div>
+                </dialog>
                 <dialog id="printing-dialog" class="printing-dialog" aria-labelledby="printing-title">
                     <h3 id="printing-title"></h3>
                     <p id="printing-status" role="status" aria-live="polite"></p>
@@ -711,9 +724,13 @@
     document.getElementById('printing-close').addEventListener('click', () => printingDialog.close());
     printingDialog.addEventListener('close', () => { printingIndex = null; });
 
+    function findPlayableCards(name) {
+        const search = name.trim().toLowerCase();
+        return playableCards.filter(card => card.name.toLowerCase() === search);
+    }
+
     function addSeededCard() {
-        const search = seededInput.value.trim().toLowerCase();
-        const matches = playableCards.filter(card => card.name.toLowerCase() === search);
+        const matches = findPlayableCards(seededInput.value);
         if (matches.length !== 1) {
             seededMessage.textContent = 'Choose a playable card from the suggestions.';
         } else if (seededValues.includes(matches[0].slug)) {
@@ -728,6 +745,50 @@
         }
         seededInput.focus();
     }
+
+    const bulkDialog = document.getElementById('seeded-bulk-dialog');
+    const bulkInput = document.getElementById('seeded-bulk-input');
+    const bulkErrors = document.getElementById('seeded-bulk-errors');
+    document.getElementById('seeded-bulk-open').addEventListener('click', () => {
+        bulkDialog.showModal();
+        bulkInput.focus();
+    });
+    document.getElementById('seeded-bulk-cancel').addEventListener('click', () => bulkDialog.close());
+    bulkInput.addEventListener('input', () => bulkErrors.replaceChildren());
+    document.getElementById('seeded-bulk-save').addEventListener('click', () => {
+        const remaining = [];
+        bulkErrors.replaceChildren();
+        for (const line of bulkInput.value.split(/\r?\n/)) {
+            const name = line.trim();
+            if (!name) continue;
+            const matches = findPlayableCards(name);
+            if (matches.length === 0) {
+                remaining.push(line);
+                continue;
+            }
+            let error;
+            if (matches.length > 1) {
+                error = 'matches multiple playable cards';
+            } else if (seededValues.includes(matches[0].slug)) {
+                error = 'already selected';
+            } else if (!seededValues.includes('')) {
+                error = 'no empty slots remain';
+            } else {
+                const index = seededValues.indexOf('');
+                seededValues[index] = matches[0].slug;
+                seededPrintings[index] = null;
+                continue;
+            }
+            remaining.push(line);
+            const item = document.createElement('li');
+            item.textContent = `${name}: ${error}.`;
+            bulkErrors.append(item);
+        }
+        bulkInput.value = remaining.join('\n');
+        renderSeededCards();
+        if (remaining.length) bulkInput.focus();
+        else bulkDialog.close();
+    });
 
     seededInput.addEventListener('input', () => {
         const search = seededInput.value.trim().toLowerCase();

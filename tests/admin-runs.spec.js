@@ -65,6 +65,69 @@ function renderDashboard(query = '') {
     });
 }
 
+test('bulk input adds valid cards and retains only errors for correction', async ({ page }) => {
+    const html = renderDashboard();
+    await page.route('http://admin.test/admin', route => route.fulfill({ contentType: 'text/html', body: html }));
+    await page.goto('http://admin.test/admin');
+    const editor = page.locator('#seeded-editor');
+    const slots = editor.locator('.seeded-slot');
+    const values = () => slots.locator('input[name^="cards"]').evaluateAll(inputs => inputs.map(input => input.value));
+    const dialog = page.getByRole('dialog', { name: 'Bulk Input' });
+    const input = dialog.getByLabel('Card names, one per line');
+    const errors = dialog.locator('#seeded-bulk-errors');
+    await expect(editor.locator('.seeded-picker')).toContainText('Bulk Input');
+    await expect(editor.locator('.seeded-picker')).not.toContainText('Fill missing');
+    await expect(editor.locator('.actions').first()).toContainText('Fill missing');
+    await expect(editor.locator('.actions').first()).toContainText('Shuffle');
+
+    await editor.getByLabel('Add a card').fill('Sort card 0');
+    await editor.getByRole('button', { name: 'Add card' }).click();
+    await editor.getByRole('button', { name: 'Bulk Input' }).click();
+    await expect(input).toBeFocused();
+    await input.fill(' sort CARD 1 \nMissing card\n\nSort card 2\nSort card 0\nSort card 1');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(input).toHaveValue('Missing card\nSort card 0\nSort card 1');
+    await expect(errors.locator('li')).toHaveText([
+        'Sort card 0: already selected.',
+        'Sort card 1: already selected.',
+    ]);
+    expect((await values()).slice(0, 3)).toEqual(['sort-0', 'sort-1', 'sort-2']);
+
+    await input.fill('Missing card');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(input).toHaveValue('Missing card');
+    await expect(errors.locator('li')).toHaveCount(0);
+
+    await input.fill('Sort card 3\nSort card 4');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toBeHidden();
+    expect((await values()).slice(0, 5)).toEqual(['sort-0', 'sort-1', 'sort-2', 'sort-3', 'sort-4']);
+
+    await page.evaluate(() => {
+        for (let i = 0; i < 16; i++) {
+            const card = { slug: `extra-${i}`, name: `Extra ${i}`, image: 'https://example.test/card.jpg', popularity: 1 };
+            playableCards.push(card);
+            playableBySlug.set(card.slug, card);
+        }
+    });
+    await editor.getByRole('button', { name: 'Bulk Input' }).click();
+    await expect(input).toHaveValue('');
+    await input.fill([...Array.from({ length: 16 }, (_, i) => `Extra ${i}`), 'Missing card'].join('\n'));
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(input).toHaveValue('Extra 15\nMissing card');
+    await expect(errors.locator('li')).toHaveText([
+        'Extra 15: no empty slots remain.',
+    ]);
+    expect((await values()).filter(Boolean)).toHaveLength(20);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await editor.getByRole('button', { name: 'Bulk Input' }).click();
+    await expect(input).toHaveValue('Extra 15\nMissing card');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+});
+
 test('organizes selected cards and keeps their printings', async ({ page }) => {
     const html = renderDashboard();
     await page.route('http://admin.test/admin', route => route.fulfill({ contentType: 'text/html', body: html }));
